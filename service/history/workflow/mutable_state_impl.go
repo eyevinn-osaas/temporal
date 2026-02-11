@@ -4058,6 +4058,7 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 	deployment *deploymentpb.Deployment,
 	redirectInfo *taskqueuespb.BuildIdRedirectInfo,
 	workerInstanceKey string,
+	workerControlTaskQueue string,
 ) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionActivityTaskStarted
 	err := ms.checkMutability(opTag)
@@ -4087,6 +4088,7 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 	}
 
 	ai.WorkerInstanceKey = workerInstanceKey
+	ai.WorkerControlTaskQueue = workerControlTaskQueue
 
 	if !ai.HasRetryPolicy {
 		event := ms.hBuilder.AddActivityTaskStartedEvent(
