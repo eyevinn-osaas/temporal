@@ -2,6 +2,7 @@ package updateworkflowoptions
 
 import (
 	"context"
+	"strings"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -147,6 +148,14 @@ func MergeAndApply(
 		return mergedOpts, false, nil
 	}
 
+	// Validate and apply time-skipping config changes before recording the event.
+	executionInfo := ms.GetExecutionInfo()
+	if !proto.Equal(mergedOpts.GetTimeSkippingConfig(), executionInfo.GetTimeSkippingConfig()) {
+		if err := validateAndApplyTimeSkippingConfig(ms, mergedOpts.GetTimeSkippingConfig()); err != nil {
+			return nil, false, err
+		}
+	}
+
 	unsetOverride := false
 	if mergedOpts.GetVersioningOverride() == nil {
 		unsetOverride = true
@@ -156,6 +165,22 @@ func MergeAndApply(
 		return nil, hasChanges, err
 	}
 	return mergedOpts, hasChanges, nil
+}
+
+// validateAndApplyTimeSkippingConfig validates the new time-skipping config and applies it
+// to the mutable state's executionInfo. VirtualTimeOffset starts at 0 (the default)
+// when time-skipping is first enabled — no explicit initialization needed.
+func validateAndApplyTimeSkippingConfig(ms historyi.MutableState, newConfig *workflowpb.TimeSkippingConfig) error {
+	executionInfo := ms.GetExecutionInfo()
+	currentConfig := executionInfo.GetTimeSkippingConfig()
+
+	// Cannot disable once enabled.
+	if currentConfig.GetEnabled() && !newConfig.GetEnabled() {
+		return serviceerror.NewFailedPrecondition("time skipping cannot be disabled once enabled")
+	}
+
+	executionInfo.TimeSkippingConfig = newConfig
+	return nil
 }
 
 func getOptionsFromMutableState(ms historyi.MutableState) *workflowpb.WorkflowExecutionOptions {
@@ -170,6 +195,11 @@ func getOptionsFromMutableState(ms historyi.MutableState) *workflowpb.WorkflowEx
 	if priority := ms.GetExecutionInfo().GetPriority(); priority != nil {
 		if cloned, ok := proto.Clone(priority).(*commonpb.Priority); ok {
 			opts.Priority = cloned
+		}
+	}
+	if tsc := ms.GetExecutionInfo().GetTimeSkippingConfig(); tsc != nil {
+		if cloned, ok := proto.Clone(tsc).(*workflowpb.TimeSkippingConfig); ok {
+			opts.TimeSkippingConfig = cloned
 		}
 	}
 	return opts
@@ -228,6 +258,35 @@ func mergeWorkflowExecutionOptions(
 			mergeInto.Priority = &commonpb.Priority{}
 		}
 		mergeInto.Priority.FairnessWeight = mergeFrom.Priority.GetFairnessWeight()
+	}
+
+	// ==== Time Skipping Config
+
+	// auto_skip must be set/cleared as a whole; sub-field paths are not supported.
+	for field := range updateFields {
+		if strings.HasPrefix(field, "timeSkippingConfig.autoSkip.") {
+			return nil, serviceerror.NewInvalidArgument(
+				"time_skipping_config.auto_skip must be set or cleared as a whole; sub-field paths are not supported",
+			)
+		}
+	}
+
+	if _, ok := updateFields["timeSkippingConfig"]; ok {
+		mergeInto.TimeSkippingConfig = mergeFrom.GetTimeSkippingConfig()
+	}
+
+	if _, ok := updateFields["timeSkippingConfig.enabled"]; ok {
+		if mergeInto.TimeSkippingConfig == nil {
+			mergeInto.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{}
+		}
+		mergeInto.TimeSkippingConfig.Enabled = mergeFrom.GetTimeSkippingConfig().GetEnabled()
+	}
+
+	if _, ok := updateFields["timeSkippingConfig.autoSkip"]; ok {
+		if mergeInto.TimeSkippingConfig == nil {
+			mergeInto.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{}
+		}
+		mergeInto.TimeSkippingConfig.AutoSkip = mergeFrom.GetTimeSkippingConfig().GetAutoSkip()
 	}
 
 	return mergeInto, nil

@@ -517,6 +517,7 @@ func NewMutableStateFromDB(
 		dbRecord.BufferedEvents,
 		mutableState.metricsHandler,
 	)
+	mutableState.syncVirtualTimeOffset()
 
 	mutableState.currentVersion = common.EmptyVersion
 	mutableState.bufferEventsInDB = dbRecord.BufferedEvents
@@ -1089,6 +1090,7 @@ func (ms *MutableStateImpl) UpdateCurrentVersion(
 		ms.bufferEventsInDB,
 		ms.metricsHandler,
 	)
+	ms.syncVirtualTimeOffset()
 
 	return nil
 }
@@ -5448,6 +5450,42 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 	return nil
 }
 
+func (ms *MutableStateImpl) AddWorkflowExecutionTimePointAdvancedEvent(
+	fireTime time.Time,
+	identity string,
+	requestID string,
+) (*historypb.HistoryEvent, error) {
+	if err := ms.checkMutability(tag.WorkflowActionTimePointAdvanced); err != nil {
+		return nil, err
+	}
+	event := ms.hBuilder.AddWorkflowExecutionTimePointAdvancedEvent(
+		fireTime,
+		identity,
+		requestID,
+	)
+	if err := ms.ApplyWorkflowExecutionTimePointAdvancedEvent(event); err != nil {
+		return nil, err
+	}
+	return event, nil
+}
+
+func (ms *MutableStateImpl) ApplyWorkflowExecutionTimePointAdvancedEvent(event *historypb.HistoryEvent) error {
+	attrs := event.GetWorkflowExecutionTimePointAdvancedEventAttributes()
+	delta := attrs.GetDurationAdvanced().AsDuration()
+	existingOffset := ms.executionInfo.GetVirtualTimeOffset().AsDuration()
+	ms.executionInfo.VirtualTimeOffset = durationpb.New(existingOffset + delta)
+	ms.hBuilder.AddVirtualTimeOffset(delta)
+	return nil
+}
+
+// syncVirtualTimeOffset propagates the persisted virtual time offset to a
+// freshly-created HistoryBuilder (which always starts at offset 0).
+func (ms *MutableStateImpl) syncVirtualTimeOffset() {
+	if offset := ms.executionInfo.GetVirtualTimeOffset().AsDuration(); offset > 0 {
+		ms.hBuilder.AddVirtualTimeOffset(offset)
+	}
+}
+
 func (ms *MutableStateImpl) updateVersioningOverride(
 	override *workflowpb.VersioningOverride,
 ) (bool, error) {
@@ -7721,6 +7759,7 @@ func (ms *MutableStateImpl) cleanupTransaction() error {
 		ms.bufferEventsInDB,
 		ms.metricsHandler,
 	)
+	ms.syncVirtualTimeOffset()
 
 	ms.InsertTasks = make(map[tasks.Category][]tasks.Task)
 	ms.BestEffortDeleteTasks = make(map[tasks.Category][]tasks.Key)

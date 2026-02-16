@@ -286,6 +286,15 @@ func Invoke(
 	}
 	result.Callbacks = append(result.Callbacks, hsmCallbackInfos...)
 
+	// Populate time-skipping info if enabled.
+	if executionInfo.GetTimeSkippingConfig() != nil {
+		result.TimeSkippingInfo = &workflowpb.TimeSkippingInfo{
+			Config:            executionInfo.GetTimeSkippingConfig(),
+			VirtualTimeOffset: executionInfo.GetVirtualTimeOffset(),
+		}
+		result.UpcomingTimePoints = buildUpcomingTimePoints(mutableState, executionInfo)
+	}
+
 	opColl := nexusoperations.MachineCollection(mutableState.HSM())
 	ops := opColl.List()
 	result.PendingNexusOperations = make([]*workflowpb.PendingNexusOperationInfo, 0, len(ops))
@@ -321,6 +330,108 @@ func Invoke(
 	}
 
 	return result, nil
+}
+
+// buildUpcomingTimePoints scans mutable state for all upcoming time points:
+// user timers, activity timeouts (excluding heartbeat), and workflow timeouts.
+func buildUpcomingTimePoints(
+	mutableState historyi.MutableState,
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+) []*workflowpb.UpcomingTimePointInfo {
+	var result []*workflowpb.UpcomingTimePointInfo
+
+	// User timers.
+	for _, timerInfo := range mutableState.GetPendingTimerInfos() {
+		if timerInfo.ExpiryTime == nil {
+			continue
+		}
+		result = append(result, &workflowpb.UpcomingTimePointInfo{
+			FireTime: timerInfo.ExpiryTime,
+			Source: &workflowpb.UpcomingTimePointInfo_Timer{
+				Timer: &workflowpb.UpcomingTimePointInfo_TimerTimePoint{
+					TimerId:        timerInfo.TimerId,
+					StartedEventId: timerInfo.StartedEventId,
+				},
+			},
+		})
+	}
+
+	// Activity timeouts (excluding heartbeat).
+	for _, ai := range mutableState.GetPendingActivityInfos() {
+		if ai.Paused || ai.ScheduledEventId == common.EmptyEventID {
+			continue
+		}
+		addActivityTimeoutPoints(&result, ai)
+	}
+
+	// Workflow run timeout.
+	if executionInfo.WorkflowRunExpirationTime != nil && executionInfo.WorkflowRunExpirationTime.IsValid() {
+		result = append(result, &workflowpb.UpcomingTimePointInfo{
+			FireTime: executionInfo.WorkflowRunExpirationTime,
+			Source: &workflowpb.UpcomingTimePointInfo_WorkflowTimeout{
+				WorkflowTimeout: &workflowpb.UpcomingTimePointInfo_WorkflowTimeoutTimePoint{
+					TimeoutType: enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+				},
+			},
+		})
+	}
+
+	// Workflow execution timeout.
+	if executionInfo.WorkflowExecutionExpirationTime != nil && executionInfo.WorkflowExecutionExpirationTime.IsValid() {
+		result = append(result, &workflowpb.UpcomingTimePointInfo{
+			FireTime: executionInfo.WorkflowExecutionExpirationTime,
+			Source: &workflowpb.UpcomingTimePointInfo_WorkflowTimeout{
+				WorkflowTimeout: &workflowpb.UpcomingTimePointInfo_WorkflowTimeoutTimePoint{
+					TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+				},
+			},
+		})
+	}
+
+	return result
+}
+
+func addActivityTimeoutPoints(result *[]*workflowpb.UpcomingTimePointInfo, ai *persistencespb.ActivityInfo) {
+	add := func(t *timestamppb.Timestamp, timeoutType enumspb.TimeoutType) {
+		if t == nil {
+			return
+		}
+		*result = append(*result, &workflowpb.UpcomingTimePointInfo{
+			FireTime: t,
+			Source: &workflowpb.UpcomingTimePointInfo_ActivityTimeout{
+				ActivityTimeout: &workflowpb.UpcomingTimePointInfo_ActivityTimeoutTimePoint{
+					ActivityId:  ai.ActivityId,
+					TimeoutType: timeoutType,
+				},
+			},
+		})
+	}
+
+	// Schedule-to-start: only if not yet started.
+	if ai.StartedEventId == common.EmptyEventID {
+		if d := ai.ScheduleToStartTimeout.AsDuration(); d > 0 {
+			t := timestamppb.New(ai.ScheduledTime.AsTime().Add(d))
+			add(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START)
+		}
+	}
+
+	// Schedule-to-close.
+	if d := ai.ScheduleToCloseTimeout.AsDuration(); d > 0 {
+		base := ai.FirstScheduledTime
+		if base == nil {
+			base = ai.ScheduledTime
+		}
+		t := timestamppb.New(base.AsTime().Add(d))
+		add(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE)
+	}
+
+	// Start-to-close: only if started.
+	if ai.StartedEventId != common.EmptyEventID {
+		if d := ai.StartToCloseTimeout.AsDuration(); d > 0 {
+			t := timestamppb.New(ai.StartedTime.AsTime().Add(d))
+			add(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
+		}
+	}
 }
 
 func buildCallbackInfoFromHSM(
