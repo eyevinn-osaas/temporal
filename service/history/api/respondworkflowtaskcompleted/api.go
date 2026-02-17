@@ -857,7 +857,6 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 			nil,
 			branchToken,
 			handler.persistenceVisibilityMgr,
-			true,
 		)
 		if err != nil {
 			return nil, err

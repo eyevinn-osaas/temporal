@@ -396,7 +396,6 @@ func Invoke(
 					nil,
 					nil,
 					continuationToken.BranchToken,
-					continuationToken.IsWorkflowRunning,
 				)
 				if err != nil {
 					return nil, err
@@ -417,7 +416,6 @@ func Invoke(
 					nil,
 					continuationToken.BranchToken,
 					persistenceVisibilityMgr,
-					continuationToken.IsWorkflowRunning,
 				)
 				if err != nil {
 					return nil, err
@@ -477,7 +475,6 @@ func Invoke(
 					continuationToken.PersistenceToken,
 					nil,
 					continuationToken.BranchToken,
-					continuationToken.IsWorkflowRunning,
 				)
 			} else {
 				history, continuationToken.PersistenceToken, err = api.GetHistory(
@@ -493,7 +490,6 @@ func Invoke(
 					nil,
 					continuationToken.BranchToken,
 					persistenceVisibilityMgr,
-					continuationToken.IsWorkflowRunning,
 				)
 			}
 

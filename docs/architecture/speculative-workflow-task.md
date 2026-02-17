@@ -56,7 +56,7 @@ a special [in-memory-queue](./in-memory-queue.md) is used for speculative Workfl
 > worker side. The worker fails the Workflow Task, clears stickiness, and everything works fine
 > after that - but a failed Workflow Task appears in the history. Fortunately, it doesn't happen often.
 >
-> See PR #9138 for related work on ensuring transient events are not incorrectly returned to CLI/UI clients.
+> See PR #9325 for related work on ensuring transient events are not incorrectly returned to CLI/UI clients.
 
 ## Speculative Workflow Task & Workflow Update
 Speculative Workflow Task was introduced to make it possible for Workflow Update to have zero writes

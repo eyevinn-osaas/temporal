@@ -299,7 +299,6 @@ func setHistoryForRecordWfTaskStartedResp(
 	var persistenceToken []byte
 	var history *historypb.History
 	var err error
-
 	if isInternalRawHistoryEnabled {
 		rawHistory, persistenceToken, err = api.GetRawHistory(
 			ctx,
@@ -313,7 +312,6 @@ func setHistoryForRecordWfTaskStartedResp(
 			nil,
 			response.GetTransientWorkflowTask(),
 			response.GetBranchToken(),
-			true,
 		)
 	} else {
 		history, persistenceToken, err = api.GetHistory(
@@ -329,7 +327,6 @@ func setHistoryForRecordWfTaskStartedResp(
 			response.GetTransientWorkflowTask(),
 			response.GetBranchToken(),
 			persistenceVisibilityMgr,
-			true,
 		)
 	}
 	if err != nil {

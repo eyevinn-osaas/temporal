@@ -40,7 +40,6 @@ func GetRawHistory(
 	token []byte,
 	transientWorkflowTaskInfo *historyspb.TransientWorkflowTaskInfo,
 	branchToken []byte,
-	isWorkflowRunning bool,
 ) (_ []*commonpb.DataBlob, _ []byte, retError error) {
 	defer func() {
 		var dataLossErr *serviceerror.DataLoss
@@ -117,7 +116,7 @@ func GetRawHistory(
 
 	if len(nextToken) == 0 && transientWorkflowTaskInfo != nil {
 		// Check if we should include transient/speculative events
-		if shouldIncludeTransientOrSpeculativeTasks(ctx, transientWorkflowTaskInfo, isWorkflowRunning) {
+		if shouldIncludeTransientOrSpeculativeTasks(ctx, transientWorkflowTaskInfo) {
 			// Validate before appending
 			if err := ValidateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
 				logger := shardContext.GetLogger()
@@ -155,7 +154,6 @@ func GetHistory(
 	transientWorkflowTaskInfo *historyspb.TransientWorkflowTaskInfo,
 	branchToken []byte,
 	persistenceVisibilityMgr manager.VisibilityManager,
-	isWorkflowRunning bool,
 ) (history *historypb.History, token []byte, retError error) {
 	defer func() {
 		var dataLossErr *serviceerror.DataLoss
@@ -233,7 +231,7 @@ func GetHistory(
 	}
 	if len(nextPageToken) == 0 && transientWorkflowTaskInfo != nil {
 		// Check if we should include transient/speculative events
-		if shouldIncludeTransientOrSpeculativeTasks(ctx, transientWorkflowTaskInfo, isWorkflowRunning) {
+		if shouldIncludeTransientOrSpeculativeTasks(ctx, transientWorkflowTaskInfo) {
 			// Validate before appending
 			if err := ValidateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
 				metrics.ServiceErrIncompleteHistoryCounter.With(metricsHandler).Record(1)
@@ -395,11 +393,16 @@ func ProcessOutgoingSearchAttributes(
 func shouldIncludeTransientOrSpeculativeTasks(
 	ctx context.Context,
 	tranOrSpecEvents *historyspb.TransientWorkflowTaskInfo,
-	isWorkflowRunning bool,
 ) bool {
+	// Include transient events if:
+	// 1. Events exist
+	// 2. Client supports them (not CLI/UI)
+	// 3. Events are structurally valid
+	// NOTE: We do NOT check workflow status here because transient events represent
+	// what was in mutable state at query time and should be included for consistency
+	// with what the worker saw in PollWorkflowTaskQueue.
 	return len(tranOrSpecEvents.GetHistorySuffix()) > 0 &&
 		clientSupportsTranOrSpecEvents(ctx) &&
-		isWorkflowRunning &&
 		AreValidTransientOrSpecEvents(tranOrSpecEvents)
 }
 
