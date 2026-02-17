@@ -146,7 +146,6 @@ func (s *executionQueueSchedulerSuite) TestSequentialExecution_SameWorkflow() {
 			orderMu.Lock()
 			executionOrder = append(executionOrder, taskIndex)
 			orderMu.Unlock()
-			time.Sleep(time.Millisecond) // Small delay to ensure ordering
 			return nil
 		}).Times(1)
 		mockTask.EXPECT().Ack().Do(func() { testWG.Done() }).Times(1)
@@ -195,7 +194,6 @@ func (s *executionQueueSchedulerSuite) TestSequentialExecution_DifferentWorkflow
 				executionOrders[workflowID].mu.Lock()
 				executionOrders[workflowID].orders = append(executionOrders[workflowID].orders, taskIndex)
 				executionOrders[workflowID].mu.Unlock()
-				time.Sleep(time.Millisecond)
 				return nil
 			}).Times(1)
 			mockTask.EXPECT().Ack().Do(func() { testWG.Done() }).Times(1)
@@ -468,12 +466,14 @@ func (s *executionQueueSchedulerSuite) TestTTLExpiryRace_NoTaskOrphaning() {
 			testWG.Done()
 		}).Times(1)
 
-		// Submit, then wait ~TTL to let the queue expire before next submit.
+		// Submit, then wait for the queue to be removed by the sweeper before next submit.
 		// This maximizes the chance of hitting the TTL expiry race.
 		scheduler.Submit(&testExecutionTask{MockTask: mockTask, workflowID: "wf1", runID: "run1"})
 
-		// Wait for TTL to expire (queue removed) before next iteration
-		time.Sleep(ttl + 10*time.Millisecond)
+		// Wait for sweeper to remove the queue before next iteration
+		s.Eventually(func() bool {
+			return !scheduler.HasQueue(testExecutionKey{workflowID: "wf1", runID: "run1"})
+		}, 5*time.Second, time.Millisecond)
 	}
 
 	// All tasks must be processed — no orphaning allowed
@@ -885,7 +885,7 @@ func (s *executionQueueSchedulerSuite) TestParallelTrySubmit() {
 	}
 
 	s.T().Logf("TrySubmit: %d succeeded, %d failed", successCount, failCount)
-	s.Greater(successCount, int32(0), "Some tasks should succeed")
+	s.Positive(successCount, "Some tasks should succeed")
 }
 
 // =============================================================================
