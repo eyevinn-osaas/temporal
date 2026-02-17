@@ -4,8 +4,6 @@ import (
 	"context"
 	"time"
 
-	enumspb "go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 )
@@ -48,9 +46,6 @@ type MutableContext interface {
 	// The task is associated with the given component and will be invoked via the registered executor for the given task
 	// referencing the component.
 	AddTask(Component, TaskAttributes, any)
-
-	// AddHistoryEvent adds a history event for the execution.
-	AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
 
 	// Get a Ref for the component
 	// This ref to the component state at the end of the transition
@@ -168,9 +163,3 @@ func (c *mutableCtx) AddTask(
 	c.root.AddTask(component, attributes, payload)
 }
 
-func (c *mutableCtx) AddHistoryEvent(
-	t enumspb.EventType,
-	setAttributes func(*historypb.HistoryEvent),
-) *historypb.HistoryEvent {
-	return c.root.backend.AddHistoryEvent(t, setAttributes)
-}

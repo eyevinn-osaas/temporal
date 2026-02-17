@@ -106,7 +106,6 @@ func newTestContext(t *testing.T, cfg *nexusoperation.Config) testContext {
 				return tests.GlobalNamespaceEntry
 			},
 		},
-		HandleAddHistoryEvent: backend.HandleAddHistoryEvent,
 	}
 
 	wf := &chasmworkflow.Workflow{
