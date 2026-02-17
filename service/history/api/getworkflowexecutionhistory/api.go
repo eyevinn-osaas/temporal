@@ -324,7 +324,7 @@ func Invoke(
 		isWorkflowRunning = continuationToken.IsWorkflowRunning
 
 		// we need to update the current next event ID and whether workflow is running
-		if len(continuationToken.PersistenceToken) == 0 && isLongPoll && continuationToken.IsWorkflowRunning {
+		if len(continuationToken.PersistenceToken) == 0 && continuationToken.IsWorkflowRunning {
 			if !isCloseEventOnly {
 				queryNextEventID = continuationToken.GetNextEventId()
 			}
