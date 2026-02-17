@@ -6,6 +6,7 @@ import (
 )
 
 // generateFlakyReport creates flaky test report (>3 failures)
+// Markdown shows ALL tests, Slack text limited to top 10
 // Returns: markdown content, slack plain text, total count
 func generateFlakyReport(reports []TestReport, maxLinks int) (markdown, slackText string, totalCount int) {
 	if len(reports) == 0 {
@@ -17,18 +18,22 @@ func generateFlakyReport(reports []TestReport, maxLinks int) (markdown, slackTex
 	var mdLines []string
 	var slackLines []string
 
-	// Display top 10 or fewer
-	displayCount := totalCount
-	if displayCount > 10 {
-		displayCount = 10
-	}
-
-	for i := 0; i < displayCount; i++ {
+	// Markdown: show ALL tests
+	for i := 0; i < totalCount; i++ {
 		report := reports[i]
 		mdLine := formatTestReportMarkdown(report.TestName, report.FailureCount, report.TotalRuns, report.FailureRate, report.GitHubURLs, maxLinks)
-		slackLine := formatTestReportPlainText(report.TestName, report.FailureCount, report.TotalRuns, report.FailureRate)
-
 		mdLines = append(mdLines, mdLine)
+	}
+
+	// Slack: limit to top 10 to keep message concise
+	slackDisplayCount := totalCount
+	if slackDisplayCount > 10 {
+		slackDisplayCount = 10
+	}
+
+	for i := 0; i < slackDisplayCount; i++ {
+		report := reports[i]
+		slackLine := formatTestReportPlainText(report.TestName, report.FailureCount, report.TotalRuns, report.FailureRate)
 		slackLines = append(slackLines, slackLine)
 	}
 

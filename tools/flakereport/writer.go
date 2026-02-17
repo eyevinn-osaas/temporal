@@ -17,7 +17,7 @@ func writeReportFiles(outputDir string, summary *ReportSummary, maxLinks int) er
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
-	// Generate report content
+	// Generate report content (all flaky tests shown)
 	flakyMarkdown, flakySlack, flakyCount := generateFlakyReport(summary.FlakyTests, maxLinks)
 	timeoutMarkdown := generateTimeoutReport(summary.Timeouts, maxLinks)
 	crashMarkdown := generateCrashReport(summary.Crashes, maxLinks)
@@ -87,7 +87,7 @@ func generateGitHubSummary(summary *ReportSummary, runID string, maxLinks int) s
 		content += timeoutReport + "\n\n"
 	}
 
-	// Flaky tests section
+	// Flaky tests section (show ALL tests)
 	if len(summary.FlakyTests) > 0 {
 		content += "### Flaky Tests\n\n"
 		flakyMarkdown, _, _ := generateFlakyReport(summary.FlakyTests, maxLinks)
