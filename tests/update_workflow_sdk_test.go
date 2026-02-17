@@ -51,11 +51,7 @@ func NonDurableRejectWorkflow(ctx workflow.Context) error {
 	}
 
 	// Wait for completion signal or timeout
-	if err := workflow.Sleep(ctx, 30*time.Second); err != nil {
-		return err
-	}
-
-	return nil
+	return workflow.Sleep(ctx, 30*time.Second)
 }
 
 // TestNonDurableRejectWithSDK replicates features/update/non_durable_reject using SDK client and worker
@@ -88,9 +84,6 @@ func (s *UpdateWorkflowSDKSuite) TestNonDurableRejectWithSDK() {
 	}, NonDurableRejectWorkflow)
 	s.NoError(err)
 	s.T().Logf("Started workflow: %s, RunID: %s", workflowRun.GetID(), workflowRun.GetRunID())
-
-	// Wait a moment for workflow to start
-	time.Sleep(500 * time.Millisecond)
 
 	// Send update that will be REJECTED by validator (non-durable rejection)
 	s.T().Log("Sending update that will be rejected...")
@@ -154,12 +147,7 @@ func BasicUpdateWorkflow(ctx workflow.Context) error {
 		return err
 	}
 
-	// Wait
-	if err := workflow.Sleep(ctx, 30*time.Second); err != nil {
-		return err
-	}
-
-	return nil
+	return workflow.Sleep(ctx, 30*time.Second)
 }
 
 // TestBasicUpdateWithSDK tests a basic update scenario using SDK
@@ -191,9 +179,6 @@ func (s *UpdateWorkflowSDKSuite) TestBasicUpdateWithSDK() {
 	}, BasicUpdateWorkflow)
 	s.NoError(err)
 	s.T().Logf("Started workflow: %s, RunID: %s", workflowRun.GetID(), workflowRun.GetRunID())
-
-	// Wait a moment for workflow to start
-	time.Sleep(500 * time.Millisecond)
 
 	// Send update
 	s.T().Log("Sending update...")
@@ -262,9 +247,6 @@ func (s *UpdateWorkflowSDKSuite) TestMultipleUpdatesWithSDK() {
 		WorkflowRunTimeout: 1 * time.Minute,
 	}, BasicUpdateWorkflow)
 	s.NoError(err)
-
-	// Wait for workflow to start
-	time.Sleep(500 * time.Millisecond)
 
 	// Send multiple updates in sequence
 	for i := 1; i <= 5; i++ {
