@@ -217,3 +217,31 @@ func buildGitHubURL(repo, runID, jobID string) string {
 	}
 	return baseURL
 }
+
+// fetchJobsForRun retrieves all jobs for a specific workflow run with timing information
+func fetchJobsForRun(ctx context.Context, repo string, runID int64) ([]WorkflowJob, error) {
+	ctxTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctxTimeout, "gh", "api",
+		fmt.Sprintf("/repos/%s/actions/runs/%d/jobs?per_page=100", repo, runID),
+	)
+
+	output, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return nil, fmt.Errorf("gh api failed for run %d jobs: %w\nstderr: %s", runID, err, string(exitErr.Stderr))
+		}
+		return nil, fmt.Errorf("failed to fetch jobs for run %d: %w", runID, err)
+	}
+
+	var response struct {
+		Jobs []WorkflowJob `json:"jobs"`
+	}
+
+	if err := json.Unmarshal(output, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse jobs response for run %d: %w", runID, err)
+	}
+
+	return response.Jobs, nil
+}

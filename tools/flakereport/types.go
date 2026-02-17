@@ -14,9 +14,9 @@ type TestFailure struct {
 
 // TestRun represents a test execution (success or failure)
 type TestRun struct {
-	Name     string // Test name
-	Failed   bool   // Whether the test failed
-	Skipped  bool   // Whether the test was skipped
+	Name    string // Test name
+	Failed  bool   // Whether the test failed
+	Skipped bool   // Whether the test was skipped
 }
 
 // TestReport represents aggregated failures for a single test
@@ -30,13 +30,14 @@ type TestReport struct {
 
 // ReportSummary contains all processed report data
 type ReportSummary struct {
-	FlakyTests        []TestReport // Tests with >3 failures
-	Timeouts          []TestReport // Tests ending with "(timeout)"
-	Crashes           []TestReport // Tests containing "crash"
-	TotalFailures     int          // Total raw failure count
-	TotalTestRuns     int          // Total test executions (all tests, all runs)
-	OverallFailureRate float64     // Overall failures per 1000 test runs
-	TotalFlakyCount   int          // Total flaky tests (not just top 10)
+	FlakyTests         []TestReport    // Tests with >3 failures
+	Timeouts           []TestReport    // Tests ending with "(timeout)"
+	Crashes            []TestReport    // Tests containing "crash"
+	TotalFailures      int             // Total raw failure count
+	TotalTestRuns      int             // Total test executions (all tests, all runs)
+	OverallFailureRate float64         // Overall failures per 1000 test runs
+	TotalFlakyCount    int             // Total flaky tests (not just top 10)
+	LatencyStats       JobLatencyStats // Job scheduling latency statistics
 }
 
 // WorkflowRun represents a GitHub Actions workflow run
@@ -47,6 +48,23 @@ type WorkflowRun struct {
 	Status     string    `json:"status"`
 	Conclusion string    `json:"conclusion"`
 	HeadBranch string    `json:"head_branch"`
+}
+
+// WorkflowJob represents a GitHub Actions job with timing information
+type WorkflowJob struct {
+	ID          int64     `json:"id"`
+	Name        string    `json:"name"`
+	CreatedAt   time.Time `json:"created_at"`
+	StartedAt   time.Time `json:"started_at"`
+	CompletedAt time.Time `json:"completed_at"`
+}
+
+// JobLatencyStats represents percentile statistics for job scheduling latency
+type JobLatencyStats struct {
+	P50      time.Duration // 50th percentile (median)
+	P75      time.Duration // 75th percentile
+	P95      time.Duration // 95th percentile
+	JobCount int           // Total number of jobs analyzed
 }
 
 // WorkflowArtifact represents a downloadable artifact
@@ -62,4 +80,3 @@ type ArtifactsResponse struct {
 	TotalCount int                `json:"total_count"`
 	Artifacts  []WorkflowArtifact `json:"artifacts"`
 }
-

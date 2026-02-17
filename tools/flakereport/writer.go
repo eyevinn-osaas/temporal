@@ -65,6 +65,15 @@ func generateGitHubSummary(summary *ReportSummary, runID string, maxLinks int) s
 	content += fmt.Sprintf("* **Total Failures**: %d\n", summary.TotalFailures)
 	content += fmt.Sprintf("* **Overall Failure Rate**: %.1f per 1000 tests\n\n", summary.OverallFailureRate)
 
+	// Job scheduling latency statistics
+	if summary.LatencyStats.JobCount > 0 {
+		content += "### Job Scheduling Latency\n\n"
+		content += fmt.Sprintf("* **P50 (Median)**: %s\n", summary.LatencyStats.P50)
+		content += fmt.Sprintf("* **P75**: %s\n", summary.LatencyStats.P75)
+		content += fmt.Sprintf("* **P95**: %s\n", summary.LatencyStats.P95)
+		content += fmt.Sprintf("* **Jobs Analyzed**: %d\n\n", summary.LatencyStats.JobCount)
+	}
+
 	// Summary table
 	content += "### Failure Categories Summary\n\n"
 	content += "| Category | Unique Tests |\n"
