@@ -100,3 +100,43 @@ func formatTestReportPlainText(testName string, failureCount, totalRuns int, fai
 	return fmt.Sprintf("• %d failures / %d runs (%.1f/1000): `%s`",
 		failureCount, totalRuns, failureRate, testName)
 }
+
+// generateCIBreakerReport creates CI breaker report (tests that failed all retries)
+// Returns markdown and plain text versions
+func generateCIBreakerReport(reports []TestReport, maxLinks int) (markdown, slackText string) {
+	if len(reports) == 0 {
+		return "", ""
+	}
+
+	var mdLines []string
+	var slackLines []string
+
+	for _, report := range reports {
+		// Use the pre-calculated CI runs broken count
+		brokenRuns := report.CIRunsBroken
+
+		mdLine := fmt.Sprintf("* %d CI run(s) broken: `%s` (%d total failures)",
+			brokenRuns, report.TestName, report.FailureCount)
+
+		// Add numbered links
+		linkCount := len(report.GitHubURLs)
+		if linkCount > maxLinks {
+			linkCount = maxLinks
+		}
+		for i := 0; i < linkCount; i++ {
+			mdLine += fmt.Sprintf(" [%d](%s)", i+1, report.GitHubURLs[i])
+		}
+
+		mdLines = append(mdLines, mdLine)
+
+		// Plain text version for Slack
+		slackLine := fmt.Sprintf("• %d CI run(s) broken: `%s` (%d total failures)",
+			brokenRuns, report.TestName, report.FailureCount)
+		slackLines = append(slackLines, slackLine)
+	}
+
+	markdown = strings.Join(mdLines, "\n")
+	slackText = strings.Join(slackLines, "\n")
+
+	return markdown, slackText
+}

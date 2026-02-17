@@ -142,5 +142,9 @@ func processArtifactJob(ctx context.Context, job ArtifactJob) ArtifactResult {
 	fmt.Printf("  [%d/%d] Found %d failures from %d test runs in %s\n",
 		job.ArtifactNum, job.TotalArtifacts, len(result.Failures), len(result.AllRuns), job.Artifact.Name)
 
+	for i := 0; i < len(result.Failures); i++ {
+		fmt.Printf("    Sample failure %d: %s\n", i+1, result.Failures[i].Name)
+	}
+
 	return result
 }

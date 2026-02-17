@@ -122,7 +122,7 @@ func runGenerateCommand(c *cli.Context) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
 
-	// Step 1: Fetch workflow runs with pagination
+	// Fetch workflow runs with pagination
 	fmt.Println("\n=== Fetching workflow runs ===")
 	runs, err := fetchWorkflowRuns(ctx, repo, workflowID, branch, days)
 	if err != nil {
@@ -135,7 +135,17 @@ func runGenerateCommand(c *cli.Context) error {
 		return nil
 	}
 
-	// Step 2: Create temp directory for downloads
+	// Count successful runs
+	successfulRuns := 0
+	for _, run := range runs {
+		if run.Conclusion == "success" {
+			successfulRuns++
+		}
+	}
+	fmt.Printf("Workflow runs: %d total, %d successful (%.2f%% success rate)\n",
+		len(runs), successfulRuns, float64(successfulRuns)/float64(len(runs))*100.0)
+
+	// Create temp directory for downloads
 	tempDir, err := os.MkdirTemp("", "flakereport-*")
 	if err != nil {
 		sendFailureNotification(slackWebhook, runID, refName, sha, repo, err)
@@ -147,7 +157,7 @@ func runGenerateCommand(c *cli.Context) error {
 		}
 	}()
 
-	// Step 3: Collect job timing data for latency statistics
+	// Collect job timing data for latency statistics
 	fmt.Println("\n=== Collecting job timing data ===")
 	var allJobs []WorkflowJob
 	for i, run := range runs {
@@ -157,7 +167,7 @@ func runGenerateCommand(c *cli.Context) error {
 			continue
 		}
 		allJobs = append(allJobs, jobsForRun...)
-		fmt.Printf("Run %d/%d (ID: %d): Fetched %d jobs\n", i+1, len(runs), run.ID, len(jobsForRun))
+		fmt.Printf("Run %d/%d (ID: %d, CreatedAt: %s): Fetched %d jobs\n", i+1, len(runs), run.ID, run.CreatedAt.Format(time.RFC3339Nano), len(jobsForRun))
 	}
 	fmt.Printf("Total jobs collected: %d\n", len(allJobs))
 
@@ -168,7 +178,7 @@ func runGenerateCommand(c *cli.Context) error {
 		latencyStats.P75,
 		latencyStats.P95)
 
-	// Step 4: Collect all artifacts
+	// Collect all artifacts
 	fmt.Println("\n=== Collecting artifacts ===")
 	var jobs []ArtifactJob
 	totalArtifacts := 0
@@ -182,11 +192,11 @@ func runGenerateCommand(c *cli.Context) error {
 		}
 
 		if len(artifacts) == 0 {
-			fmt.Printf("Run %d/%d (ID: %d): No test artifacts found\n", i+1, len(runs), run.ID)
+			fmt.Printf("Run %d/%d (ID: %d, CreatedAt: %s): No test artifacts found\n", i+1, len(runs), run.ID, run.CreatedAt.Format(time.RFC3339Nano))
 			continue
 		}
 
-		fmt.Printf("Run %d/%d (ID: %d): Found %d artifacts\n", i+1, len(runs), run.ID, len(artifacts))
+		fmt.Printf("Run %d/%d (ID: %d, CreatedAt: %s): Found %d artifacts\n", i+1, len(runs), run.ID, run.CreatedAt.Format(time.RFC3339Nano), len(artifacts))
 
 		// Create jobs for each artifact
 		for _, artifact := range artifacts {
@@ -211,7 +221,7 @@ func runGenerateCommand(c *cli.Context) error {
 
 	fmt.Printf("\nTotal artifacts to process: %d\n", totalArtifacts)
 
-	// Step 5: Process artifacts in parallel
+	// Process artifacts in parallel
 	fmt.Println("\n=== Processing artifacts in parallel ===")
 	allFailures, allTestRuns, processedArtifacts := processArtifactsParallel(ctx, jobs, concurrency)
 
@@ -220,25 +230,30 @@ func runGenerateCommand(c *cli.Context) error {
 	fmt.Printf("Total test failures found: %d\n", len(allFailures))
 	fmt.Printf("Processed artifacts: %d\n", processedArtifacts)
 
-	// Step 6: Count test runs by name for failure rate calculation
+	// Count test runs by name for failure rate calculation
 	testRunCounts := countTestRuns(allTestRuns)
 
-	// Step 7: Group failures by test name
+	// Group failures by test name
 	grouped := groupFailuresByTest(allFailures)
 	fmt.Printf("Unique tests with failures: %d\n", len(grouped))
 
-	// Step 8: Classify failures
+	// Classify failures
 	flakyMap, timeoutMap, crashMap := classifyFailures(grouped)
 	fmt.Printf("Flaky tests (>%d failures): %d\n", minFlakyFailures, len(flakyMap))
 	fmt.Printf("Timeout tests: %d\n", len(timeoutMap))
 	fmt.Printf("Crash tests: %d\n", len(crashMap))
 
-	// Step 9: Convert to reports with failure rates and sort
+	// Identify CI breakers (tests that failed all retries in a single job)
+	ciBreakerMap, ciBreakCounts := identifyCIBreakers(allFailures)
+	fmt.Printf("CI breaker tests (failed all retries): %d\n", len(ciBreakerMap))
+
+	// Convert to reports with failure rates and sort
 	flakyReports := convertToReports(flakyMap, testRunCounts, repo, maxLinks)
 	timeoutReports := convertToReports(timeoutMap, testRunCounts, repo, maxLinks)
 	crashReports := convertToReports(crashMap, testRunCounts, repo, maxLinks)
+	ciBreakerReports := convertCIBreakersToReports(ciBreakerMap, ciBreakCounts, repo, maxLinks)
 
-	// Step 10: Calculate overall failure rate
+	// Calculate overall failure rate
 	overallFailureRate := 0.0
 	totalTestRuns := len(allTestRuns)
 	if totalTestRuns > 0 {
@@ -246,26 +261,29 @@ func runGenerateCommand(c *cli.Context) error {
 	}
 	fmt.Printf("Overall failure rate: %.2f per 1000 test runs\n", overallFailureRate)
 
-	// Step 11: Build summary
+	// Build summary
 	summary := &ReportSummary{
 		FlakyTests:         flakyReports,
 		Timeouts:           timeoutReports,
 		Crashes:            crashReports,
+		CIBreakers:         ciBreakerReports,
 		TotalFailures:      len(allFailures),
 		TotalTestRuns:      totalTestRuns,
 		OverallFailureRate: overallFailureRate,
 		TotalFlakyCount:    len(flakyReports),
+		TotalWorkflowRuns:  len(runs),
+		SuccessfulRuns:     successfulRuns,
 		LatencyStats:       latencyStats,
 	}
 
-	// Step 12: Write output files
+	// Write output files
 	fmt.Println("\n=== Writing report files ===")
 	if err := writeReportFiles(outputDir, summary, maxLinks); err != nil {
 		sendFailureNotification(slackWebhook, runID, refName, sha, repo, err)
 		return fmt.Errorf("failed to write report files: %w", err)
 	}
 
-	// Step 13: Write GitHub Actions summary
+	// Write GitHub Actions summary
 	if enableGitHubSummary {
 		fmt.Println("\n=== Writing GitHub Actions summary ===")
 		summaryContent := generateGitHubSummary(summary, runID, maxLinks)
@@ -274,11 +292,12 @@ func runGenerateCommand(c *cli.Context) error {
 		}
 	}
 
-	// Step 14: Send Slack notification
+	// Send Slack notification
 	if slackWebhook != "" {
 		fmt.Println("\n=== Sending Slack notification ===")
 		_, flakySlack, _ := generateFlakyReport(summary.FlakyTests, maxLinks)
-		message := buildSuccessMessage(summary, flakySlack, runID, repo, days)
+		_, ciBreakerSlack := generateCIBreakerReport(summary.CIBreakers, maxLinks)
+		message := buildSuccessMessage(summary, flakySlack, ciBreakerSlack, runID, repo, days)
 		if err := sendSlackMessage(slackWebhook, message); err != nil {
 			fmt.Printf("Warning: Failed to send Slack notification: %v\n", err)
 		}

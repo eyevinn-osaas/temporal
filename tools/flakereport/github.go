@@ -96,7 +96,7 @@ func fetchRunArtifacts(ctx context.Context, repo string, runID int64) ([]Workflo
 			continue
 		}
 		name := strings.ToLower(artifact.Name)
-		if strings.Contains(name, "junit") || strings.Contains(name, "xunit") || strings.Contains(name, "test-results") {
+		if strings.Contains(name, "junit") {
 			testArtifacts = append(testArtifacts, artifact)
 		}
 	}

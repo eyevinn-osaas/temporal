@@ -21,6 +21,7 @@ func writeReportFiles(outputDir string, summary *ReportSummary, maxLinks int) er
 	flakyMarkdown, flakySlack, flakyCount := generateFlakyReport(summary.FlakyTests, maxLinks)
 	timeoutMarkdown := generateTimeoutReport(summary.Timeouts, maxLinks)
 	crashMarkdown := generateCrashReport(summary.Crashes, maxLinks)
+	ciBreakerMarkdown, _ := generateCIBreakerReport(summary.CIBreakers, maxLinks)
 
 	// Write flaky.txt (markdown with links, top 10)
 	if err := os.WriteFile(filepath.Join(outputDir, "flaky.txt"), []byte(flakyMarkdown), 0644); err != nil {
@@ -48,6 +49,11 @@ func writeReportFiles(outputDir string, summary *ReportSummary, maxLinks int) er
 		return fmt.Errorf("failed to write crash.txt: %w", err)
 	}
 
+	// Write ci_breakers.txt (tests that broke CI by failing all retries)
+	if err := os.WriteFile(filepath.Join(outputDir, "ci_breakers.txt"), []byte(ciBreakerMarkdown), 0644); err != nil {
+		return fmt.Errorf("failed to write ci_breakers.txt: %w", err)
+	}
+
 	fmt.Printf("Report files written to %s\n", outputDir)
 	return nil
 }
@@ -61,6 +67,13 @@ func generateGitHubSummary(summary *ReportSummary, runID string, maxLinks int) s
 
 	// Overall statistics
 	content += "### Overall Statistics\n\n"
+
+	// CI success rate
+	ciSuccessRate := 0.0
+	if summary.TotalWorkflowRuns > 0 {
+		ciSuccessRate = (float64(summary.SuccessfulRuns) / float64(summary.TotalWorkflowRuns)) * 100.0
+	}
+	content += fmt.Sprintf("* **CI Success Rate**: %d/%d (%.2f%%)\n", summary.SuccessfulRuns, summary.TotalWorkflowRuns, ciSuccessRate)
 	content += fmt.Sprintf("* **Total Test Runs**: %d\n", summary.TotalTestRuns)
 	content += fmt.Sprintf("* **Total Failures**: %d\n", summary.TotalFailures)
 	content += fmt.Sprintf("* **Overall Failure Rate**: %.1f per 1000 tests\n\n", summary.OverallFailureRate)
@@ -78,9 +91,17 @@ func generateGitHubSummary(summary *ReportSummary, runID string, maxLinks int) s
 	content += "### Failure Categories Summary\n\n"
 	content += "| Category | Unique Tests |\n"
 	content += "|----------|--------------|\n"
+	content += fmt.Sprintf("| CI Breakers | %d |\n", len(summary.CIBreakers))
 	content += fmt.Sprintf("| Crashes | %d |\n", len(summary.Crashes))
 	content += fmt.Sprintf("| Timeouts | %d |\n", len(summary.Timeouts))
 	content += fmt.Sprintf("| Flaky Tests | %d |\n\n", summary.TotalFlakyCount)
+
+	// CI Breakers section (tests that failed all retries)
+	if len(summary.CIBreakers) > 0 {
+		content += "### CI Breakers (Failed All Retries)\n\n"
+		ciBreakerMarkdown, _ := generateCIBreakerReport(summary.CIBreakers, maxLinks)
+		content += ciBreakerMarkdown + "\n\n"
+	}
 
 	// Crashes section
 	if len(summary.Crashes) > 0 {

@@ -1,6 +1,7 @@
 package flakereport
 
 import (
+	"math"
 	"sort"
 	"time"
 )
@@ -34,10 +35,11 @@ func calculateJobLatencyStats(jobs []WorkflowJob) JobLatencyStats {
 	// Sort latencies for percentile calculation
 	sort.Float64s(latencies)
 
+	// Round to nearest second for cleaner output
 	stats := JobLatencyStats{
-		P50:      time.Duration(percentile(latencies, 50) * float64(time.Second)),
-		P75:      time.Duration(percentile(latencies, 75) * float64(time.Second)),
-		P95:      time.Duration(percentile(latencies, 95) * float64(time.Second)),
+		P50:      time.Duration(math.Round(percentile(latencies, 50)) * float64(time.Second)),
+		P75:      time.Duration(math.Round(percentile(latencies, 75)) * float64(time.Second)),
+		P95:      time.Duration(math.Round(percentile(latencies, 95)) * float64(time.Second)),
 		JobCount: len(latencies),
 	}
 

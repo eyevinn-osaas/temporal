@@ -26,13 +26,32 @@ type SlackText struct {
 	Text string `json:"text"`
 }
 
+// truncateToSlackLimit truncates text to stay within Slack's block text limit
+// Slack blocks have a 3000 character limit per text field
+func truncateToSlackLimit(text string, limit int) string {
+	if len(text) <= limit {
+		return text
+	}
+	return text[:limit-50] + "\n\n...(truncated due to length)"
+}
+
 // buildSuccessMessage creates success notification with report summary
-func buildSuccessMessage(summary *ReportSummary, flakyContent string, runID, repo string, days int) *SlackMessage {
+func buildSuccessMessage(summary *ReportSummary, flakyContent, ciBreakerContent string, runID, repo string, days int) *SlackMessage {
+	// Calculate CI success rate
+	ciSuccessRate := 0.0
+	if summary.TotalWorkflowRuns > 0 {
+		ciSuccessRate = (float64(summary.SuccessfulRuns) / float64(summary.TotalWorkflowRuns)) * 100.0
+	}
+
 	// Summary stats
-	summaryText := fmt.Sprintf("*Total Test Runs:* %d\n*Total Failures:* %d\n*Failure Rate:* %.2f per 1000 tests\n\n*Crashes:* %d\n*Flaky Tests:* %d\n*Timeouts:* %d",
+	summaryText := fmt.Sprintf("*CI Success Rate:* %d/%d (%.2f%%)\n*Total Test Runs:* %d\n*Total Failures:* %d\n*Failure Rate:* %.2f per 1000 tests\n\n*CI Breakers:* %d\n*Crashes:* %d\n*Flaky Tests:* %d\n*Timeouts:* %d",
+		summary.SuccessfulRuns,
+		summary.TotalWorkflowRuns,
+		ciSuccessRate,
 		summary.TotalTestRuns,
 		summary.TotalFailures,
 		summary.OverallFailureRate,
+		len(summary.CIBreakers),
 		len(summary.Crashes),
 		summary.TotalFlakyCount,
 		len(summary.Timeouts))
@@ -60,19 +79,32 @@ func buildSuccessMessage(summary *ReportSummary, flakyContent string, runID, rep
 				Type: "section",
 				Text: &SlackText{
 					Type: "mrkdwn",
-					Text: summaryText,
+					Text: truncateToSlackLimit(summaryText, 2900), // Keep under 3000 char limit
 				},
 			},
 		},
 	}
 
-	// Add flaky tests details if present
-	if flakyContent != "" {
+	// Add CI breakers details if present
+	if ciBreakerContent != "" {
+		ciBreakerText := fmt.Sprintf("*CI Breakers (Failed All Retries):*\n%s", ciBreakerContent)
 		msg.Blocks = append(msg.Blocks, SlackBlock{
 			Type: "section",
 			Text: &SlackText{
 				Type: "mrkdwn",
-				Text: fmt.Sprintf("*Flaky Tests Details:*\n%s", flakyContent),
+				Text: truncateToSlackLimit(ciBreakerText, 2900),
+			},
+		})
+	}
+
+	// Add flaky tests details if present
+	if flakyContent != "" {
+		flakyText := fmt.Sprintf("*Flaky Tests Details:*\n%s", flakyContent)
+		msg.Blocks = append(msg.Blocks, SlackBlock{
+			Type: "section",
+			Text: &SlackText{
+				Type: "mrkdwn",
+				Text: truncateToSlackLimit(flakyText, 2900),
 			},
 		})
 	}

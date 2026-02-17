@@ -21,11 +21,12 @@ type TestRun struct {
 
 // TestReport represents aggregated failures for a single test
 type TestReport struct {
-	TestName     string   // Normalized test name (retry suffix stripped)
-	FailureCount int      // Total number of failures
-	TotalRuns    int      // Total number of times this test ran (including successes)
-	FailureRate  float64  // Failures per 1000 test runs
-	GitHubURLs   []string // Up to max_links failure URLs
+	TestName      string   // Normalized test name (retry suffix stripped)
+	FailureCount  int      // Total number of failures
+	TotalRuns     int      // Total number of times this test ran (including successes)
+	FailureRate   float64  // Failures per 1000 test runs
+	CIRunsBroken  int      // Number of CI runs this test broke (for CI breakers only)
+	GitHubURLs    []string // Up to max_links failure URLs
 }
 
 // ReportSummary contains all processed report data
@@ -33,10 +34,13 @@ type ReportSummary struct {
 	FlakyTests         []TestReport    // Tests with >3 failures
 	Timeouts           []TestReport    // Tests ending with "(timeout)"
 	Crashes            []TestReport    // Tests containing "crash"
+	CIBreakers         []TestReport    // Tests that failed all retries (3x) in a single job
 	TotalFailures      int             // Total raw failure count
 	TotalTestRuns      int             // Total test executions (all tests, all runs)
 	OverallFailureRate float64         // Overall failures per 1000 test runs
 	TotalFlakyCount    int             // Total flaky tests (not just top 10)
+	TotalWorkflowRuns  int             // Total workflow runs analyzed
+	SuccessfulRuns     int             // Workflow runs that succeeded
 	LatencyStats       JobLatencyStats // Job scheduling latency statistics
 }
 
