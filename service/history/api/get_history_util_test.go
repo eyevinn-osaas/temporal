@@ -15,11 +15,10 @@ func TestShouldIncludeTransientOrSpeculativeTasks(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name              string
-		clientName        string
-		historySuffix     []*historypb.HistoryEvent
-		isWorkflowRunning bool
-		expected          bool
+		name          string
+		clientName    string
+		historySuffix []*historypb.HistoryEvent
+		expected      bool
 	}{
 		{
 			name:       "all conditions met",
@@ -30,22 +29,19 @@ func TestShouldIncludeTransientOrSpeculativeTasks(t *testing.T) {
 					EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 				},
 			},
-			isWorkflowRunning: true,
-			expected:          true,
+			expected: true,
 		},
 		{
-			name:              "empty history suffix",
-			clientName:        headers.ClientNameGoSDK,
-			historySuffix:     []*historypb.HistoryEvent{},
-			isWorkflowRunning: true,
-			expected:          false,
+			name:          "empty history suffix",
+			clientName:    headers.ClientNameGoSDK,
+			historySuffix: []*historypb.HistoryEvent{},
+			expected:      false,
 		},
 		{
-			name:              "nil history suffix",
-			clientName:        headers.ClientNameGoSDK,
-			historySuffix:     nil,
-			isWorkflowRunning: true,
-			expected:          false,
+			name:          "nil history suffix",
+			clientName:    headers.ClientNameGoSDK,
+			historySuffix: nil,
+			expected:      false,
 		},
 		{
 			name:       "CLI client",
@@ -56,8 +52,7 @@ func TestShouldIncludeTransientOrSpeculativeTasks(t *testing.T) {
 					EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 				},
 			},
-			isWorkflowRunning: true,
-			expected:          false,
+			expected: false,
 		},
 		{
 			name:       "UI client",
@@ -68,8 +63,7 @@ func TestShouldIncludeTransientOrSpeculativeTasks(t *testing.T) {
 					EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 				},
 			},
-			isWorkflowRunning: true,
-			expected:          false,
+			expected: false,
 		},
 		{
 			name:       "workflow not running",
@@ -80,8 +74,7 @@ func TestShouldIncludeTransientOrSpeculativeTasks(t *testing.T) {
 					EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 				},
 			},
-			isWorkflowRunning: false,
-			expected:          false,
+			expected: false,
 		},
 		{
 			name:       "invalid events - first event not scheduled",
@@ -92,8 +85,7 @@ func TestShouldIncludeTransientOrSpeculativeTasks(t *testing.T) {
 					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 				},
 			},
-			isWorkflowRunning: true,
-			expected:          false,
+			expected: false,
 		},
 		{
 			name:       "two valid events",
@@ -108,8 +100,7 @@ func TestShouldIncludeTransientOrSpeculativeTasks(t *testing.T) {
 					EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 				},
 			},
-			isWorkflowRunning: true,
-			expected:          true,
+			expected: true,
 		},
 	}
 
@@ -123,7 +114,7 @@ func TestShouldIncludeTransientOrSpeculativeTasks(t *testing.T) {
 				HistorySuffix: tt.historySuffix,
 			}
 
-			result := shouldIncludeTransientOrSpeculativeTasks(ctx, tranOrSpecEvents, tt.isWorkflowRunning)
+			result := shouldIncludeTransientOrSpeculativeTasks(ctx, tranOrSpecEvents)
 			r.Equal(tt.expected, result)
 		})
 	}

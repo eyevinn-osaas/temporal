@@ -324,6 +324,11 @@ func Invoke(
 		isWorkflowRunning = continuationToken.IsWorkflowRunning
 
 		// we need to update the current next event ID and whether workflow is running
+		// NOTE: This refresh now happens for ALL requests (not just long-poll) to fix system worker race conditions.
+		// System workers use non-long-poll requests (WaitNewEvent defaults to false) - see:
+		//   - service/worker/scheduler/activities.go lines 164-175
+		//   - service/worker/batcher/activities.go lines 806-811
+		// If the non-long-poll behavior changes in the future, this refresh logic may need adjustment.
 		if len(continuationToken.PersistenceToken) == 0 && continuationToken.IsWorkflowRunning {
 			if !isCloseEventOnly {
 				queryNextEventID = continuationToken.GetNextEventId()
@@ -462,6 +467,14 @@ func Invoke(
 				continuationToken = nil
 			}
 		} else {
+			shardContext.GetLogger().Warn("Fetching history page",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(execution.GetWorkflowId()),
+				tag.WorkflowRunID(execution.GetRunId()),
+				tag.NewInt64("first-event-id", continuationToken.FirstEventId),
+				tag.NewInt64("next-event-id", continuationToken.NextEventId),
+				tag.NewBoolTag("workflow-running", isWorkflowRunning))
+
 			if sendRawWorkflowHistoryForNamespace || sendRawHistoryBetweenInternalServices {
 				historyBlob, continuationToken.PersistenceToken, err = api.GetRawHistory(
 					ctx,
@@ -497,6 +510,13 @@ func Invoke(
 				return nil, err
 			}
 
+			shardContext.GetLogger().Warn("Fetched history page",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(execution.GetWorkflowId()),
+				tag.WorkflowRunID(execution.GetRunId()),
+				tag.NewInt("history-event-count", len(history.Events)),
+				tag.NewBoolTag("has-more-pages", len(continuationToken.PersistenceToken) > 0))
+
 			// Query and append transient/speculative tasks if on last page
 			// BUG 4 FIX: Always try to append transient tasks on last page, regardless of workflow status.
 			// The appendTransientTasks function will handle the logic of whether to use cached tasks
@@ -512,6 +532,39 @@ func Invoke(
 				tag.NewInt64("next-event-id", continuationToken.NextEventId))
 
 			if len(continuationToken.PersistenceToken) == 0 {
+				// We're on the last page - refresh nextEventID to ensure we have the latest value
+				// This handles the race where workflow completes between initial query and history fetch
+				if isWorkflowRunning {
+					shardContext.GetLogger().Warn("Refreshing nextEventID on last page before appending transient tasks",
+						tag.WorkflowNamespaceID(namespaceID.String()),
+						tag.WorkflowID(execution.GetWorkflowId()),
+						tag.WorkflowRunID(execution.GetRunId()),
+						tag.NewInt64("current-next-event-id", continuationToken.NextEventId))
+
+					_, _, _, refreshedNextEventID, refreshedIsWorkflowRunning, _, _, refreshedCachedTransientTasks, err :=
+						queryMutableState(namespaceID, execution, continuationToken.NextEventId, continuationToken.BranchToken, continuationToken.VersionHistoryItem, continuationToken.VersionedTransition)
+					if err == nil {
+						continuationToken.NextEventId = refreshedNextEventID
+						isWorkflowRunning = refreshedIsWorkflowRunning
+						// Update cached transient tasks if we got fresh ones
+						if refreshedCachedTransientTasks != nil {
+							cachedTransientTasks = refreshedCachedTransientTasks
+						}
+						shardContext.GetLogger().Warn("Refreshed nextEventID on last page",
+							tag.WorkflowNamespaceID(namespaceID.String()),
+							tag.WorkflowID(execution.GetWorkflowId()),
+							tag.WorkflowRunID(execution.GetRunId()),
+							tag.NewInt64("refreshed-next-event-id", refreshedNextEventID),
+							tag.NewBoolTag("refreshed-workflow-running", refreshedIsWorkflowRunning))
+					} else {
+						shardContext.GetLogger().Warn("Failed to refresh nextEventID on last page",
+							tag.WorkflowNamespaceID(namespaceID.String()),
+							tag.WorkflowID(execution.GetWorkflowId()),
+							tag.WorkflowRunID(execution.GetRunId()),
+							tag.Error(err))
+					}
+				}
+
 				shardContext.GetLogger().Warn("Calling appendTransientTasks on last page",
 					tag.WorkflowNamespaceID(namespaceID.String()),
 					tag.WorkflowID(execution.GetWorkflowId()),
