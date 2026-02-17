@@ -5611,7 +5611,6 @@ func (s *engineSuite) TestGetHistory() {
 		nil,
 		branchToken,
 		s.mockVisibilityMgr,
-		false, // isWorkflowRunning
 	)
 	s.NoError(err)
 	s.NotNil(history)

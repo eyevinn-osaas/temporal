@@ -3,6 +3,7 @@ package getworkflowexecutionhistory
 import (
 	"context"
 	"errors"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -360,6 +361,28 @@ func Invoke(
 		continuationToken.NextEventId = nextEventID
 		continuationToken.IsWorkflowRunning = isWorkflowRunning
 		continuationToken.PersistenceToken = nil
+
+		// For non-long-poll requests (system workers), add a small delay then refresh nextEventID
+		// to reduce the race condition where workflow completes between initial query and history fetch.
+		// This matches the refresh logic for paginated requests at line 327-339.
+		if !isLongPoll && isWorkflowRunning && !isCloseEventOnly {
+			// Small sleep to let any in-flight events commit
+			time.Sleep(5 * time.Millisecond)
+
+			// Refresh to get latest nextEventID
+			_, _, _, refreshedNextEventID, refreshedIsWorkflowRunning, _, _, _, refreshErr :=
+				queryMutableState(namespaceID, execution, common.FirstEventID, continuationToken.BranchToken, continuationToken.VersionHistoryItem, continuationToken.VersionedTransition)
+			if refreshErr == nil {
+				continuationToken.NextEventId = refreshedNextEventID
+				continuationToken.IsWorkflowRunning = refreshedIsWorkflowRunning
+				shardContext.GetLogger().Info("Refreshed nextEventID for non-long-poll initial request",
+					tag.WorkflowNamespaceID(namespaceID.String()),
+					tag.WorkflowID(execution.GetWorkflowId()),
+					tag.WorkflowRunID(execution.GetRunId()),
+					tag.NewInt64("original-next-event-id", nextEventID),
+					tag.NewInt64("refreshed-next-event-id", refreshedNextEventID))
+			}
+		}
 	}
 
 	// TODO below is a temporary solution to guard against invalid event batch
@@ -532,38 +555,6 @@ func Invoke(
 				tag.NewInt64("next-event-id", continuationToken.NextEventId))
 
 			if len(continuationToken.PersistenceToken) == 0 {
-				// We're on the last page - refresh nextEventID to ensure we have the latest value
-				// This handles the race where workflow completes between initial query and history fetch
-				if isWorkflowRunning {
-					shardContext.GetLogger().Warn("Refreshing nextEventID on last page before appending transient tasks",
-						tag.WorkflowNamespaceID(namespaceID.String()),
-						tag.WorkflowID(execution.GetWorkflowId()),
-						tag.WorkflowRunID(execution.GetRunId()),
-						tag.NewInt64("current-next-event-id", continuationToken.NextEventId))
-
-					_, _, _, refreshedNextEventID, refreshedIsWorkflowRunning, _, _, refreshedCachedTransientTasks, err :=
-						queryMutableState(namespaceID, execution, continuationToken.NextEventId, continuationToken.BranchToken, continuationToken.VersionHistoryItem, continuationToken.VersionedTransition)
-					if err == nil {
-						continuationToken.NextEventId = refreshedNextEventID
-						isWorkflowRunning = refreshedIsWorkflowRunning
-						// Update cached transient tasks if we got fresh ones
-						if refreshedCachedTransientTasks != nil {
-							cachedTransientTasks = refreshedCachedTransientTasks
-						}
-						shardContext.GetLogger().Warn("Refreshed nextEventID on last page",
-							tag.WorkflowNamespaceID(namespaceID.String()),
-							tag.WorkflowID(execution.GetWorkflowId()),
-							tag.WorkflowRunID(execution.GetRunId()),
-							tag.NewInt64("refreshed-next-event-id", refreshedNextEventID),
-							tag.NewBoolTag("refreshed-workflow-running", refreshedIsWorkflowRunning))
-					} else {
-						shardContext.GetLogger().Warn("Failed to refresh nextEventID on last page",
-							tag.WorkflowNamespaceID(namespaceID.String()),
-							tag.WorkflowID(execution.GetWorkflowId()),
-							tag.WorkflowRunID(execution.GetRunId()),
-							tag.Error(err))
-					}
-				}
 
 				shardContext.GetLogger().Warn("Calling appendTransientTasks on last page",
 					tag.WorkflowNamespaceID(namespaceID.String()),
