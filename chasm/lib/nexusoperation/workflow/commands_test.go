@@ -102,7 +102,7 @@ func newTestContext(t *testing.T, cfg *nexusoperation.Config) testContext {
 
 	chasmCtx := &chasm.MockMutableContext{
 		MockContext: chasm.MockContext{
-			HandleGetNamespaceEntry: func() *namespace.Namespace {
+			HandleNamespaceEntry: func() *namespace.Namespace {
 				return tests.GlobalNamespaceEntry
 			},
 		},

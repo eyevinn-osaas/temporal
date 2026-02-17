@@ -20,7 +20,7 @@ type MockContext struct {
 	HandleExecutionCloseTime   func() time.Time
 	HandleStateTransitionCount func() int64
 	HandleLibrary              func(name string) (Library, bool)
-	HandleGetNamespaceEntry    func() *namespace.Namespace
+	HandleNamespaceEntry    func() *namespace.Namespace
 }
 
 func (c *MockContext) GetContext() context.Context {
@@ -66,9 +66,9 @@ func (c *MockContext) StateTransitionCount() int64 {
 	return 0
 }
 
-func (c *MockContext) GetNamespaceEntry() *namespace.Namespace {
-	if c.HandleGetNamespaceEntry != nil {
-		return c.HandleGetNamespaceEntry()
+func (c *MockContext) NamespaceEntry() *namespace.Namespace {
+	if c.HandleNamespaceEntry != nil {
+		return c.HandleNamespaceEntry()
 	}
 	return nil
 }

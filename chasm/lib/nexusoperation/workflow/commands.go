@@ -57,7 +57,7 @@ func (ch *commandHandler) handleScheduleCommand(
 	cmd *commandpb.Command,
 	opts command.HandlerOptions,
 ) error {
-	ns := chasmCtx.GetNamespaceEntry()
+	ns := chasmCtx.NamespaceEntry()
 	nsName := ns.Name().String()
 
 	if !ch.config.Enabled() {

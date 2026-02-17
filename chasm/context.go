@@ -29,8 +29,8 @@ type Context interface {
 	ExecutionCloseTime() time.Time
 	// Logger returns a logger tagged with execution key and other chasm framework internal information.
 	Logger() log.Logger
-	// GetNamespaceEntry returns the namespace entry for the execution.
-	GetNamespaceEntry() *namespace.Namespace
+	// NamespaceEntry returns the namespace entry for the execution.
+	NamespaceEntry() *namespace.Namespace
 
 	// Intent() OperationIntent
 	// ComponentOptions(Component) []ComponentOption
@@ -139,7 +139,7 @@ func (c *immutableCtx) structuredRef(component Component) (ComponentRef, error) 
 	return c.root.structuredRef(component)
 }
 
-func (c *immutableCtx) GetNamespaceEntry() *namespace.Namespace {
+func (c *immutableCtx) NamespaceEntry() *namespace.Namespace {
 	return c.root.backend.GetNamespaceEntry()
 }
 
