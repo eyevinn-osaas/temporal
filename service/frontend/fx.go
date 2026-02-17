@@ -97,7 +97,6 @@ var Module = fx.Options(
 	fx.Provide(PersistenceRateLimitingParamsProvider),
 	service.PersistenceLazyLoadedServiceResolverModule,
 	fx.Provide(FEReplicatorNamespaceReplicationQueueProvider),
-	fx.Provide(NewNoopDataUpdateChecker),
 	fx.Provide(nsreplication.NewNoopDataMerger),
 	fx.Provide(AuthorizationInterceptorProvider),
 	fx.Provide(NamespaceCheckerProvider),
@@ -794,7 +793,6 @@ func HandlerProvider(
 	activityHandler activity.FrontendHandler,
 	registry *chasm.Registry,
 	frontendServiceResolver membership.ServiceResolver,
-	dataUpdateChecker NamespaceDataUpdateChecker,
 ) Handler {
 	workerDeploymentReadRateLimiter := configs.NewGlobalNamespaceRateLimiter(
 		frontendServiceResolver,
@@ -831,7 +829,6 @@ func HandlerProvider(
 		activityHandler,
 		registry,
 		workerDeploymentReadRateLimiter,
-		dataUpdateChecker,
 	)
 	return wfHandler
 }

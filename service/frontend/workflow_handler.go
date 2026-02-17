@@ -180,7 +180,6 @@ func NewWorkflowHandler(
 	activityHandler activity.FrontendHandler,
 	registry *chasm.Registry,
 	workerDeploymentReadRateLimiter quotas.RequestRateLimiter,
-	dataUpdateChecker NamespaceDataUpdateChecker,
 ) *WorkflowHandler {
 	handler := &WorkflowHandler{
 		FrontendHandler: activityHandler,
@@ -197,7 +196,6 @@ func NewWorkflowHandler(
 			archiverProvider,
 			timeSource,
 			config,
-			dataUpdateChecker,
 		),
 		getDefaultWorkflowRetrySettings: config.DefaultWorkflowRetryPolicy,
 		visibilityMgr:                   visibilityMgr,
