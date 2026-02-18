@@ -3,7 +3,6 @@ package getworkflowexecutionhistory
 import (
 	"context"
 	"errors"
-	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -325,12 +324,13 @@ func Invoke(
 		isWorkflowRunning = continuationToken.IsWorkflowRunning
 
 		// we need to update the current next event ID and whether workflow is running
-		// NOTE: This refresh now happens for ALL requests (not just long-poll) to fix system worker race conditions.
+		// NOTE: This refresh now happens for ALL requests (not just long-poll) AND regardless of workflow status
+		// to fix system worker race conditions where workflow completes between pages.
 		// System workers use non-long-poll requests (WaitNewEvent defaults to false) - see:
 		//   - service/worker/scheduler/activities.go lines 164-175
 		//   - service/worker/batcher/activities.go lines 806-811
 		// If the non-long-poll behavior changes in the future, this refresh logic may need adjustment.
-		if len(continuationToken.PersistenceToken) == 0 && continuationToken.IsWorkflowRunning {
+		if len(continuationToken.PersistenceToken) == 0 {
 			if !isCloseEventOnly {
 				queryNextEventID = continuationToken.GetNextEventId()
 			}
@@ -362,27 +362,6 @@ func Invoke(
 		continuationToken.IsWorkflowRunning = isWorkflowRunning
 		continuationToken.PersistenceToken = nil
 
-		// For non-long-poll requests (system workers), add a small delay then refresh nextEventID
-		// to reduce the race condition where workflow completes between initial query and history fetch.
-		// This matches the refresh logic for paginated requests at line 327-339.
-		if !isLongPoll && isWorkflowRunning && !isCloseEventOnly {
-			// Small sleep to let any in-flight events commit
-			time.Sleep(5 * time.Millisecond)
-
-			// Refresh to get latest nextEventID
-			_, _, _, refreshedNextEventID, refreshedIsWorkflowRunning, _, _, _, refreshErr :=
-				queryMutableState(namespaceID, execution, common.FirstEventID, continuationToken.BranchToken, continuationToken.VersionHistoryItem, continuationToken.VersionedTransition)
-			if refreshErr == nil {
-				continuationToken.NextEventId = refreshedNextEventID
-				continuationToken.IsWorkflowRunning = refreshedIsWorkflowRunning
-				shardContext.GetLogger().Info("Refreshed nextEventID for non-long-poll initial request",
-					tag.WorkflowNamespaceID(namespaceID.String()),
-					tag.WorkflowID(execution.GetWorkflowId()),
-					tag.WorkflowRunID(execution.GetRunId()),
-					tag.NewInt64("original-next-event-id", nextEventID),
-					tag.NewInt64("refreshed-next-event-id", refreshedNextEventID))
-			}
-		}
 	}
 
 	// TODO below is a temporary solution to guard against invalid event batch
