@@ -1066,3 +1066,80 @@ func TestTaskGeneratorImpl_GenerateDeleteHistoryEventTask_ActivityRetention(t *t
 		})
 	}
 }
+
+func TestGenerateActivityCommandTasks(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name              string
+		featureEnabled    bool
+		scheduledEventIDs []int64
+		controlQueue      string
+		expectTask        bool
+	}{
+		{
+			name:              "creates task when enabled with valid inputs",
+			featureEnabled:    true,
+			scheduledEventIDs: []int64{5, 6, 7},
+			controlQueue:      "test-control-queue",
+			expectTask:        true,
+		},
+		{
+			name:              "no task when feature disabled",
+			featureEnabled:    false,
+			scheduledEventIDs: []int64{5, 6, 7},
+			controlQueue:      "test-control-queue",
+			expectTask:        false,
+		},
+		{
+			name:              "no task when scheduledEventIDs empty",
+			featureEnabled:    true,
+			scheduledEventIDs: []int64{},
+			controlQueue:      "test-control-queue",
+			expectTask:        false,
+		},
+		{
+			name:              "no task when controlQueue empty",
+			featureEnabled:    true,
+			scheduledEventIDs: []int64{5, 6, 7},
+			controlQueue:      "",
+			expectTask:        false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+
+			mutableState := historyi.NewMockMutableState(ctrl)
+			mutableState.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(
+				tests.NamespaceID.String(), tests.WorkflowID, tests.RunID,
+			)).AnyTimes()
+
+			var capturedTasks []tasks.Task
+			if tc.expectTask {
+				mutableState.EXPECT().AddTasks(gomock.Any()).Do(func(ts ...tasks.Task) {
+					capturedTasks = append(capturedTasks, ts...)
+				}).Times(1)
+			}
+
+			cfg := &configs.Config{
+				EnableActivityCancellationNexusTask: func() bool { return tc.featureEnabled },
+			}
+
+			taskGenerator := NewTaskGenerator(nil, mutableState, cfg, nil, log.NewTestLogger())
+			err := taskGenerator.GenerateActivityCommandTasks(tc.scheduledEventIDs, tc.controlQueue, enumsspb.ACTIVITY_COMMAND_TYPE_CANCEL)
+			require.NoError(t, err)
+
+			if tc.expectTask {
+				require.Len(t, capturedTasks, 1)
+				notifyTask, ok := capturedTasks[0].(*tasks.ActivityCommandTask)
+				require.True(t, ok)
+				assert.Equal(t, tc.scheduledEventIDs, notifyTask.ScheduledEventIDs)
+				assert.Equal(t, tc.controlQueue, notifyTask.Destination)
+				assert.Equal(t, tests.NamespaceID.String(), notifyTask.NamespaceID)
+				assert.Equal(t, enumsspb.ACTIVITY_COMMAND_TYPE_CANCEL, notifyTask.CommandType)
+			}
+		})
+	}
+}

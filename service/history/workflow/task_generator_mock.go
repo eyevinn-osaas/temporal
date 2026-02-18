@@ -14,6 +14,7 @@ import (
 	time "time"
 
 	history "go.temporal.io/api/history/v1"
+	enums "go.temporal.io/server/api/enums/v1"
 	persistence "go.temporal.io/server/api/persistence/v1"
 	hsm "go.temporal.io/server/service/history/hsm"
 	interfaces "go.temporal.io/server/service/history/interfaces"
@@ -187,6 +188,20 @@ func (m *MockTaskGenerator) GenerateMigrationTasks(targetClusters []string) ([]t
 func (mr *MockTaskGeneratorMockRecorder) GenerateMigrationTasks(targetClusters any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateMigrationTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateMigrationTasks), targetClusters)
+}
+
+// GenerateActivityCommandTasks mocks base method.
+func (m *MockTaskGenerator) GenerateActivityCommandTasks(scheduledEventIDs []int64, controlQueue string, notificationType enums.ActivityCommandType) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GenerateActivityCommandTasks", scheduledEventIDs, controlQueue, notificationType)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// GenerateActivityCommandTasks indicates an expected call of GenerateActivityCommandTasks.
+func (mr *MockTaskGeneratorMockRecorder) GenerateActivityCommandTasks(scheduledEventIDs, controlQueue, notificationType any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateActivityCommandTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateActivityCommandTasks), scheduledEventIDs, controlQueue, notificationType)
 }
 
 // GenerateRecordWorkflowStartedTasks mocks base method.

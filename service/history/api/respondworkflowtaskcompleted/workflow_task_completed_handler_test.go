@@ -16,6 +16,7 @@ import (
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/collection"
@@ -383,4 +384,72 @@ func mustMarshalAny(t *testing.T, pb proto.Message) *anypb.Any {
 	var a anypb.Any
 	require.NoError(t, a.MarshalFrom(pb))
 	return &a
+}
+
+func TestFlushBatchedActivityCommandTasks(t *testing.T) {
+	t.Parallel()
+
+	t.Run("batches activities by control queue", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		ms := historyi.NewMockMutableState(ctrl)
+
+		ms.EXPECT().AddActivityCommandTasks(
+			[]int64{5, 6, 7},
+			"control-queue-1",
+			gomock.Any(),
+		).Return(nil).Times(1)
+
+		handler := &workflowTaskCompletedHandler{
+			mutableState: ms,
+			pendingActivityCancelsByControlQueue: map[string][]int64{
+				"control-queue-1": {5, 6, 7},
+			},
+		}
+
+		err := handler.flushBatchedActivityCommandTasks()
+		require.NoError(t, err)
+	})
+
+	t.Run("creates separate tasks for different control queues", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		ms := historyi.NewMockMutableState(ctrl)
+
+		// Capture calls to verify both queues are processed
+		calls := make(map[string][]int64)
+		ms.EXPECT().AddActivityCommandTasks(
+			gomock.Any(),
+			gomock.Any(),
+			enumsspb.ACTIVITY_COMMAND_TYPE_CANCEL,
+		).DoAndReturn(func(ids []int64, queue string, _ enumsspb.ActivityCommandType) error {
+			calls[queue] = ids
+			return nil
+		}).Times(2)
+
+		handler := &workflowTaskCompletedHandler{
+			mutableState: ms,
+			pendingActivityCancelsByControlQueue: map[string][]int64{
+				"control-queue-1": {5, 6},
+				"control-queue-2": {7, 8},
+			},
+		}
+
+		err := handler.flushBatchedActivityCommandTasks()
+		require.NoError(t, err)
+
+		require.Equal(t, []int64{5, 6}, calls["control-queue-1"])
+		require.Equal(t, []int64{7, 8}, calls["control-queue-2"])
+	})
+
+	t.Run("does nothing when no pending cancels", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		ms := historyi.NewMockMutableState(ctrl)
+
+		handler := &workflowTaskCompletedHandler{
+			mutableState:                         ms,
+			pendingActivityCancelsByControlQueue: nil,
+		}
+
+		err := handler.flushBatchedActivityCommandTasks()
+		require.NoError(t, err)
+	})
 }

@@ -408,6 +408,20 @@ func (mr *MockMutableStateMockRecorder) AddHistorySize(size any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddHistorySize", reflect.TypeOf((*MockMutableState)(nil).AddHistorySize), size)
 }
 
+// AddActivityCommandTasks mocks base method.
+func (m *MockMutableState) AddActivityCommandTasks(scheduledEventIDs []int64, controlQueue string, notificationType enums0.ActivityCommandType) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddActivityCommandTasks", scheduledEventIDs, controlQueue, notificationType)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AddActivityCommandTasks indicates an expected call of AddActivityCommandTasks.
+func (mr *MockMutableStateMockRecorder) AddActivityCommandTasks(scheduledEventIDs, controlQueue, notificationType any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddActivityCommandTasks", reflect.TypeOf((*MockMutableState)(nil).AddActivityCommandTasks), scheduledEventIDs, controlQueue, notificationType)
+}
+
 // AddReapplyCandidateEvent mocks base method.
 func (m *MockMutableState) AddReapplyCandidateEvent(event *history.HistoryEvent) {
 	m.ctrl.T.Helper()
