@@ -56,14 +56,6 @@ func buildSuccessMessage(summary *ReportSummary, flakyContent, ciBreakerContent 
 		summary.TotalFlakyCount,
 		len(summary.Timeouts))
 
-	// Add job latency stats if available
-	if summary.LatencyStats.JobCount > 0 {
-		summaryText += fmt.Sprintf("\n\n*Job Scheduling Latency:*\nP50: %s | P75: %s | P95: %s",
-			summary.LatencyStats.P50,
-			summary.LatencyStats.P75,
-			summary.LatencyStats.P95)
-	}
-
 	// Build message
 	msg := &SlackMessage{
 		Text: "Flaky Tests Report Generated",

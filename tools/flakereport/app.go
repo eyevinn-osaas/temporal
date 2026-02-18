@@ -96,6 +96,98 @@ func NewCliApp() *cli.App {
 	return app
 }
 
+// fetchAndAnalyzeWorkflowRuns fetches workflow runs and counts successes
+func fetchAndAnalyzeWorkflowRuns(ctx context.Context, repo string, workflowID int64, branch string, days int) ([]WorkflowRun, int, error) {
+	fmt.Println("\n=== Fetching workflow runs ===")
+	runs, err := fetchWorkflowRuns(ctx, repo, workflowID, branch, days)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to fetch workflow runs: %w", err)
+	}
+
+	if len(runs) == 0 {
+		fmt.Println("No workflow runs found in the specified time range")
+		return nil, 0, nil
+	}
+
+	// Count successful runs
+	successfulRuns := 0
+	for _, run := range runs {
+		if run.Conclusion == "success" {
+			successfulRuns++
+		}
+	}
+	fmt.Printf("Workflow runs: %d total, %d successful (%.1f%% success rate)\n",
+		len(runs), successfulRuns, float64(successfulRuns)/float64(len(runs))*100.0)
+
+	return runs, successfulRuns, nil
+}
+
+// collectArtifactJobs collects all artifact jobs from workflow runs
+func collectArtifactJobs(ctx context.Context, repo string, runs []WorkflowRun, tempDir string) ([]ArtifactJob, error) {
+	fmt.Println("\n=== Collecting artifacts ===")
+	var jobs []ArtifactJob
+	totalArtifacts := 0
+
+	for i, run := range runs {
+		artifacts, err := fetchRunArtifacts(ctx, repo, run.ID)
+		if err != nil {
+			fmt.Printf("Warning: Failed to fetch artifacts for run %d: %v\n", run.ID, err)
+			continue
+		}
+
+		if len(artifacts) == 0 {
+			fmt.Printf("Run %d/%d (ID: %d, CreatedAt: %s): No test artifacts found\n",
+				i+1, len(runs), run.ID, run.CreatedAt.Format(time.RFC3339Nano))
+			continue
+		}
+
+		fmt.Printf("Run %d/%d (ID: %d, CreatedAt: %s): Found %d artifacts\n",
+			i+1, len(runs), run.ID, run.CreatedAt.Format(time.RFC3339Nano), len(artifacts))
+
+		for _, artifact := range artifacts {
+			totalArtifacts++
+			jobs = append(jobs, ArtifactJob{
+				Repo:        repo,
+				RunID:       run.ID,
+				Artifact:    artifact,
+				TempDir:     tempDir,
+				RunNumber:   i + 1,
+				TotalRuns:   len(runs),
+				ArtifactNum: totalArtifacts,
+			})
+		}
+	}
+
+	fmt.Printf("\nTotal artifacts to process: %d\n", totalArtifacts)
+	return jobs, nil
+}
+
+// buildReportSummary builds the complete report summary from processed data
+func buildReportSummary(flakyReports, timeoutReports, crashReports, ciBreakerReports []TestReport,
+	allFailures []TestFailure, allTestRuns []TestRun, runs []WorkflowRun, successfulRuns int) *ReportSummary {
+
+	// Calculate overall failure rate
+	overallFailureRate := 0.0
+	totalTestRuns := len(allTestRuns)
+	if totalTestRuns > 0 {
+		overallFailureRate = (float64(len(allFailures)) / float64(totalTestRuns)) * 1000.0
+	}
+	fmt.Printf("Overall failure rate: %.2f per 1000 test runs\n", overallFailureRate)
+
+	return &ReportSummary{
+		FlakyTests:         flakyReports,
+		Timeouts:           timeoutReports,
+		Crashes:            crashReports,
+		CIBreakers:         ciBreakerReports,
+		TotalFailures:      len(allFailures),
+		TotalTestRuns:      totalTestRuns,
+		OverallFailureRate: overallFailureRate,
+		TotalFlakyCount:    len(flakyReports),
+		TotalWorkflowRuns:  len(runs),
+		SuccessfulRuns:     successfulRuns,
+	}
+}
+
 func runGenerateCommand(c *cli.Context) (err error) {
 	// Extract parameters
 	repo := c.String("repository")
@@ -129,27 +221,14 @@ func runGenerateCommand(c *cli.Context) (err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
 
-	// Fetch workflow runs with pagination
-	fmt.Println("\n=== Fetching workflow runs ===")
-	runs, err := fetchWorkflowRuns(ctx, repo, workflowID, branch, days)
+	// Fetch and analyze workflow runs
+	runs, successfulRuns, err := fetchAndAnalyzeWorkflowRuns(ctx, repo, workflowID, branch, days)
 	if err != nil {
-		return fmt.Errorf("failed to fetch workflow runs: %w", err)
+		return err
 	}
-
 	if len(runs) == 0 {
-		fmt.Println("No workflow runs found in the specified time range")
 		return nil
 	}
-
-	// Count successful runs
-	successfulRuns := 0
-	for _, run := range runs {
-		if run.Conclusion == "success" {
-			successfulRuns++
-		}
-	}
-	fmt.Printf("Workflow runs: %d total, %d successful (%.2f%% success rate)\n",
-		len(runs), successfulRuns, float64(successfulRuns)/float64(len(runs))*100.0)
 
 	// Create temp directory for downloads
 	tempDir, err := os.MkdirTemp("", "flakereport-*")
@@ -162,63 +241,11 @@ func runGenerateCommand(c *cli.Context) (err error) {
 		}
 	}()
 
-	// Collect job timing data for latency statistics
-	fmt.Println("\n=== Collecting job timing data ===")
-	var allJobs []WorkflowJob
-	for i, run := range runs {
-		jobsForRun, err := fetchJobsForRun(ctx, repo, run.ID)
-		if err != nil {
-			fmt.Printf("Warning: Failed to fetch jobs for run %d: %v\n", run.ID, err)
-			continue
-		}
-		allJobs = append(allJobs, jobsForRun...)
-		fmt.Printf("Run %d/%d (ID: %d, CreatedAt: %s): Fetched %d jobs\n", i+1, len(runs), run.ID, run.CreatedAt.Format(time.RFC3339Nano), len(jobsForRun))
-	}
-	fmt.Printf("Total jobs collected: %d\n", len(allJobs))
-
-	// Calculate job scheduling latency statistics
-	latencyStats := calculateJobLatencyStats(allJobs)
-	fmt.Printf("Job scheduling latency - P50: %s, P75: %s, P95: %s\n",
-		latencyStats.P50,
-		latencyStats.P75,
-		latencyStats.P95)
-
 	// Collect all artifacts
-	fmt.Println("\n=== Collecting artifacts ===")
-	var jobs []ArtifactJob
-	totalArtifacts := 0
-
-	for i, run := range runs {
-		// Fetch artifacts for this run
-		artifacts, err := fetchRunArtifacts(ctx, repo, run.ID)
-		if err != nil {
-			fmt.Printf("Warning: Failed to fetch artifacts for run %d: %v\n", run.ID, err)
-			continue
-		}
-
-		if len(artifacts) == 0 {
-			fmt.Printf("Run %d/%d (ID: %d, CreatedAt: %s): No test artifacts found\n", i+1, len(runs), run.ID, run.CreatedAt.Format(time.RFC3339Nano))
-			continue
-		}
-
-		fmt.Printf("Run %d/%d (ID: %d, CreatedAt: %s): Found %d artifacts\n", i+1, len(runs), run.ID, run.CreatedAt.Format(time.RFC3339Nano), len(artifacts))
-
-		// Create jobs for each artifact
-		for _, artifact := range artifacts {
-			totalArtifacts++
-			jobs = append(jobs, ArtifactJob{
-				Repo:        repo,
-				RunID:       run.ID,
-				Artifact:    artifact,
-				TempDir:     tempDir,
-				RunNumber:   i + 1,
-				TotalRuns:   len(runs),
-				ArtifactNum: totalArtifacts,
-			})
-		}
+	jobs, err := collectArtifactJobs(ctx, repo, runs, tempDir)
+	if err != nil {
+		return err
 	}
-
-	fmt.Printf("\nTotal artifacts to process: %d\n", totalArtifacts)
 
 	// Process artifacts in parallel
 	fmt.Println("\n=== Processing artifacts in parallel ===")
@@ -252,28 +279,11 @@ func runGenerateCommand(c *cli.Context) (err error) {
 	crashReports := convertToReports(crashMap, testRunCounts, repo, maxLinks)
 	ciBreakerReports := convertCIBreakersToReports(ciBreakerMap, ciBreakCounts, repo, maxLinks)
 
-	// Calculate overall failure rate
-	overallFailureRate := 0.0
-	totalTestRuns := len(allTestRuns)
-	if totalTestRuns > 0 {
-		overallFailureRate = (float64(len(allFailures)) / float64(totalTestRuns)) * 1000.0
-	}
-	fmt.Printf("Overall failure rate: %.2f per 1000 test runs\n", overallFailureRate)
-
 	// Build summary
-	summary := &ReportSummary{
-		FlakyTests:         flakyReports,
-		Timeouts:           timeoutReports,
-		Crashes:            crashReports,
-		CIBreakers:         ciBreakerReports,
-		TotalFailures:      len(allFailures),
-		TotalTestRuns:      totalTestRuns,
-		OverallFailureRate: overallFailureRate,
-		TotalFlakyCount:    len(flakyReports),
-		TotalWorkflowRuns:  len(runs),
-		SuccessfulRuns:     successfulRuns,
-		LatencyStats:       latencyStats,
-	}
+	summary := buildReportSummary(
+		flakyReports, timeoutReports, crashReports, ciBreakerReports,
+		allFailures, allTestRuns, runs, successfulRuns,
+	)
 
 	// Write output files
 	fmt.Println("\n=== Writing report files ===")
