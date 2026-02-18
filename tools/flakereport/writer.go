@@ -19,8 +19,8 @@ func writeReportFiles(outputDir string, summary *ReportSummary, maxLinks int) er
 
 	// Generate report content (all flaky tests shown)
 	flakyMarkdown, flakySlack, flakyCount := generateFlakyReport(summary.FlakyTests, maxLinks)
-	timeoutMarkdown := generateTimeoutReport(summary.Timeouts, maxLinks)
-	crashMarkdown := generateCrashReport(summary.Crashes, maxLinks)
+	timeoutMarkdown := generateStandardReport(summary.Timeouts, maxLinks)
+	crashMarkdown := generateStandardReport(summary.Crashes, maxLinks)
 	ciBreakerMarkdown, _ := generateCIBreakerReport(summary.CIBreakers, maxLinks)
 
 	// Write flaky.txt (markdown with links, top 10)
@@ -106,14 +106,14 @@ func generateGitHubSummary(summary *ReportSummary, runID string, maxLinks int) s
 	// Crashes section
 	if len(summary.Crashes) > 0 {
 		content += "### Crashes\n\n"
-		crashReport := generateCrashReport(summary.Crashes, maxLinks)
+		crashReport := generateStandardReport(summary.Crashes, maxLinks)
 		content += crashReport + "\n\n"
 	}
 
 	// Timeouts section
 	if len(summary.Timeouts) > 0 {
 		content += "### Timeouts\n\n"
-		timeoutReport := generateTimeoutReport(summary.Timeouts, maxLinks)
+		timeoutReport := generateStandardReport(summary.Timeouts, maxLinks)
 		content += timeoutReport + "\n\n"
 	}
 

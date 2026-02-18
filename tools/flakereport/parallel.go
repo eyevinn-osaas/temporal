@@ -9,14 +9,13 @@ import (
 
 // ArtifactJob represents a job to download and process an artifact
 type ArtifactJob struct {
-	Repo           string
-	RunID          int64
-	Artifact       WorkflowArtifact
-	TempDir        string
-	RunNumber      int
-	TotalRuns      int
-	ArtifactNum    int
-	TotalArtifacts int
+	Repo        string
+	RunID       int64
+	Artifact    WorkflowArtifact
+	TempDir     string
+	RunNumber   int
+	TotalRuns   int
+	ArtifactNum int
 }
 
 // ArtifactResult represents the result of processing an artifact
@@ -34,15 +33,17 @@ func processArtifactsParallel(ctx context.Context, jobs []ArtifactJob, concurren
 		return nil, nil, 0
 	}
 
+	totalArtifacts := len(jobs)
+
 	// Create channels
-	jobChan := make(chan ArtifactJob, len(jobs))
-	resultChan := make(chan ArtifactResult, len(jobs))
+	jobChan := make(chan ArtifactJob, totalArtifacts)
+	resultChan := make(chan ArtifactResult, totalArtifacts)
 
 	// Start worker pool
 	var wg sync.WaitGroup
 	for i := 0; i < concurrency; i++ {
 		wg.Add(1)
-		go worker(ctx, jobChan, resultChan, &wg)
+		go worker(ctx, jobChan, resultChan, totalArtifacts, &wg)
 	}
 
 	// Send jobs to workers
@@ -84,23 +85,23 @@ func processArtifactsParallel(ctx context.Context, jobs []ArtifactJob, concurren
 }
 
 // worker processes jobs from the job channel
-func worker(ctx context.Context, jobs <-chan ArtifactJob, results chan<- ArtifactResult, wg *sync.WaitGroup) {
+func worker(ctx context.Context, jobs <-chan ArtifactJob, results chan<- ArtifactResult, totalArtifacts int, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	for job := range jobs {
-		result := processArtifactJob(ctx, job)
+		result := processArtifactJob(ctx, job, totalArtifacts)
 		results <- result
 	}
 }
 
 // processArtifactJob downloads and processes a single artifact
-func processArtifactJob(ctx context.Context, job ArtifactJob) ArtifactResult {
+func processArtifactJob(ctx context.Context, job ArtifactJob, totalArtifacts int) ArtifactResult {
 	result := ArtifactResult{
 		Artifact: job.Artifact,
 	}
 
 	fmt.Printf("  [%d/%d] Run %d/%d: Downloading artifact %s (ID: %d)...\n",
-		job.ArtifactNum, job.TotalArtifacts, job.RunNumber, job.TotalRuns,
+		job.ArtifactNum, totalArtifacts, job.RunNumber, job.TotalRuns,
 		job.Artifact.Name, job.Artifact.ID)
 
 	// Download artifact
@@ -120,7 +121,7 @@ func processArtifactJob(ctx context.Context, job ArtifactJob) ArtifactResult {
 	}
 
 	fmt.Printf("  [%d/%d] Extracted %d XML files from %s\n",
-		job.ArtifactNum, job.TotalArtifacts, len(xmlFiles), job.Artifact.Name)
+		job.ArtifactNum, totalArtifacts, len(xmlFiles), job.Artifact.Name)
 
 	// Parse JUnit XML files
 	for _, xmlFile := range xmlFiles {
@@ -140,7 +141,7 @@ func processArtifactJob(ctx context.Context, job ArtifactJob) ArtifactResult {
 	}
 
 	fmt.Printf("  [%d/%d] Found %d failures from %d test runs in %s\n",
-		job.ArtifactNum, job.TotalArtifacts, len(result.Failures), len(result.AllRuns), job.Artifact.Name)
+		job.ArtifactNum, totalArtifacts, len(result.Failures), len(result.AllRuns), job.Artifact.Name)
 
 	for i := 0; i < len(result.Failures); i++ {
 		fmt.Printf("    Sample failure %d: %s\n", i+1, result.Failures[i].Name)

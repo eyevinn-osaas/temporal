@@ -43,23 +43,9 @@ func generateFlakyReport(reports []TestReport, maxLinks int) (markdown, slackTex
 	return markdown, slackText, totalCount
 }
 
-// generateTimeoutReport creates timeout report (tests ending with "(timeout)")
-func generateTimeoutReport(reports []TestReport, maxLinks int) string {
-	if len(reports) == 0 {
-		return ""
-	}
-
-	var lines []string
-	for _, report := range reports {
-		line := formatTestReportMarkdown(report.TestName, report.FailureCount, report.TotalRuns, report.FailureRate, report.GitHubURLs, maxLinks)
-		lines = append(lines, line)
-	}
-
-	return strings.Join(lines, "\n")
-}
-
-// generateCrashReport creates crash report (tests containing "crash")
-func generateCrashReport(reports []TestReport, maxLinks int) string {
+// generateStandardReport creates a report for a list of tests with failures
+// Used for timeouts, crashes, and other categorized test failures
+func generateStandardReport(reports []TestReport, maxLinks int) string {
 	if len(reports) == 0 {
 		return ""
 	}

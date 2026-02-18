@@ -21,12 +21,12 @@ type TestRun struct {
 
 // TestReport represents aggregated failures for a single test
 type TestReport struct {
-	TestName      string   // Normalized test name (retry suffix stripped)
-	FailureCount  int      // Total number of failures
-	TotalRuns     int      // Total number of times this test ran (including successes)
-	FailureRate   float64  // Failures per 1000 test runs
-	CIRunsBroken  int      // Number of CI runs this test broke (for CI breakers only)
-	GitHubURLs    []string // Up to max_links failure URLs
+	TestName     string   // Normalized test name (retry suffix stripped)
+	FailureCount int      // Total number of failures
+	TotalRuns    int      // Total number of times this test ran (including successes)
+	FailureRate  float64  // Failures per 1000 test runs
+	CIRunsBroken int      // Number of CI runs this test broke (for CI breakers only)
+	GitHubURLs   []string // Up to max_links failure URLs
 }
 
 // ReportSummary contains all processed report data

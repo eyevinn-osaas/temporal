@@ -140,7 +140,7 @@ func classifyFailures(grouped map[string][]TestFailure) (flaky, timeout, crash m
 		}
 
 		// Flaky: more than MinFlakyFailures failures
-		if len(failures) > minFlakyFailures {
+		if len(failures) >= minFlakyFailures {
 			flaky[testName] = failures
 		}
 	}

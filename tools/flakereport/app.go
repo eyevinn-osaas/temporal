@@ -96,7 +96,7 @@ func NewCliApp() *cli.App {
 	return app
 }
 
-func runGenerateCommand(c *cli.Context) error {
+func runGenerateCommand(c *cli.Context) (err error) {
 	// Extract parameters
 	repo := c.String("repository")
 	branch := c.String("branch")
@@ -110,6 +110,13 @@ func runGenerateCommand(c *cli.Context) error {
 	runID := c.String("run-id")
 	refName := c.String("ref-name")
 	sha := c.String("sha")
+
+	// Send failure notification on error
+	defer func() {
+		if err != nil {
+			sendFailureNotification(slackWebhook, runID, refName, sha, repo, err)
+		}
+	}()
 
 	fmt.Println("Starting flaky test report generation...")
 	fmt.Printf("Repository: %s\n", repo)
@@ -126,7 +133,6 @@ func runGenerateCommand(c *cli.Context) error {
 	fmt.Println("\n=== Fetching workflow runs ===")
 	runs, err := fetchWorkflowRuns(ctx, repo, workflowID, branch, days)
 	if err != nil {
-		sendFailureNotification(slackWebhook, runID, refName, sha, repo, err)
 		return fmt.Errorf("failed to fetch workflow runs: %w", err)
 	}
 
@@ -148,7 +154,6 @@ func runGenerateCommand(c *cli.Context) error {
 	// Create temp directory for downloads
 	tempDir, err := os.MkdirTemp("", "flakereport-*")
 	if err != nil {
-		sendFailureNotification(slackWebhook, runID, refName, sha, repo, err)
 		return fmt.Errorf("failed to create temp directory: %w", err)
 	}
 	defer func() {
@@ -202,21 +207,15 @@ func runGenerateCommand(c *cli.Context) error {
 		for _, artifact := range artifacts {
 			totalArtifacts++
 			jobs = append(jobs, ArtifactJob{
-				Repo:           repo,
-				RunID:          run.ID,
-				Artifact:       artifact,
-				TempDir:        tempDir,
-				RunNumber:      i + 1,
-				TotalRuns:      len(runs),
-				ArtifactNum:    totalArtifacts,
-				TotalArtifacts: 0, // Will be updated below
+				Repo:        repo,
+				RunID:       run.ID,
+				Artifact:    artifact,
+				TempDir:     tempDir,
+				RunNumber:   i + 1,
+				TotalRuns:   len(runs),
+				ArtifactNum: totalArtifacts,
 			})
 		}
-	}
-
-	// Update total artifact count in all jobs
-	for i := range jobs {
-		jobs[i].TotalArtifacts = totalArtifacts
 	}
 
 	fmt.Printf("\nTotal artifacts to process: %d\n", totalArtifacts)
@@ -278,8 +277,7 @@ func runGenerateCommand(c *cli.Context) error {
 
 	// Write output files
 	fmt.Println("\n=== Writing report files ===")
-	if err := writeReportFiles(outputDir, summary, maxLinks); err != nil {
-		sendFailureNotification(slackWebhook, runID, refName, sha, repo, err)
+	if err = writeReportFiles(outputDir, summary, maxLinks); err != nil {
 		return fmt.Errorf("failed to write report files: %w", err)
 	}
 
