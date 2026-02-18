@@ -763,6 +763,40 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		if err != nil {
 			return nil, err
 		}
+
+		// Path 2: Gap detection for inline WorkflowTask in RespondWorkflowTaskCompleted response
+		if inlineTask := resp.GetNewWorkflowTask(); inlineTask != nil {
+			lastHistEventID := int64(0)
+			historyEventCount := 0
+			if n := len(inlineTask.History.GetEvents()); n > 0 {
+				historyEventCount = n
+				lastHistEventID = inlineTask.History.Events[n-1].GetEventId()
+			}
+
+			handler.logger.Warn("[WFTD] RespondWorkflowTaskCompleted inline task assembled",
+				tag.WorkflowNamespaceID(namespaceEntry.ID().String()),
+				tag.WorkflowID(token.GetWorkflowId()),
+				tag.WorkflowRunID(token.GetRunId()),
+				tag.NewInt64("started-event-id", inlineTask.GetStartedEventId()),
+				tag.NewInt("history-event-count", historyEventCount),
+				tag.NewInt64("last-event-id", lastHistEventID),
+				tag.NewBoolTag("has-next-page-token", len(inlineTask.NextPageToken) > 0),
+			)
+
+			// Gap detection - exact structural condition SDK detects
+			if inlineTask.GetStartedEventId() > lastHistEventID+1 &&
+				len(inlineTask.NextPageToken) == 0 {
+				gap := inlineTask.GetStartedEventId() - lastHistEventID
+				handler.logger.Warn("[WFTD] RespondWorkflowTaskCompleted inline task history ends before StartedEventId; transient WFT events may be missing",
+					tag.WorkflowNamespaceID(namespaceEntry.ID().String()),
+					tag.WorkflowID(token.GetWorkflowId()),
+					tag.WorkflowRunID(token.GetRunId()),
+					tag.NewInt64("started-event-id", inlineTask.GetStartedEventId()),
+					tag.NewInt64("last-event-id", lastHistEventID),
+					tag.NewInt64("gap", gap),
+				)
+			}
+		}
 	}
 
 	// If completedEvent is nil then it means that WT was speculative and

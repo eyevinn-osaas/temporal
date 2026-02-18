@@ -439,16 +439,17 @@ func setHistoryForRecordWfTaskStartedResp(
 	)
 
 	// Flag the gap if history ends before StartedEventId with no page token
+	// This is the exact structural condition the SDK detects as "premature end of stream"
 	if response.StartedEventId > 0 && lastHistoryEventID > 0 &&
 		response.StartedEventId > lastHistoryEventID+1 &&
 		len(response.NextPageToken) == 0 {
 		gap := response.StartedEventId - lastHistoryEventID
-		shardContext.GetLogger().Warn("[WFTD] Poll response history ends before StartedEventId with no page token",
+		shardContext.GetLogger().Warn("[WFTD] Poll response history ends before StartedEventId with no page token; transient WFT events may be missing",
 			tag.WorkflowNamespaceID(workflowKey.GetNamespaceID()),
 			tag.WorkflowID(workflowKey.GetWorkflowID()),
 			tag.WorkflowRunID(workflowKey.GetRunID()),
 			tag.NewInt64("started-event-id", response.StartedEventId),
-			tag.NewInt64("last-history-event-id", lastHistoryEventID),
+			tag.NewInt64("last-event-id", lastHistoryEventID),
 			tag.NewInt64("gap", gap),
 			tag.NewBoolTag("is-speculative", isSpeculative),
 		)
