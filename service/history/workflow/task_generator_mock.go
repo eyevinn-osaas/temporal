@@ -46,6 +46,20 @@ func (m *MockTaskGenerator) EXPECT() *MockTaskGeneratorMockRecorder {
 	return m.recorder
 }
 
+// GenerateActivityCommandTasks mocks base method.
+func (m *MockTaskGenerator) GenerateActivityCommandTasks(scheduledEventIDs []int64, controlQueue string, commandType enums.ActivityCommandType) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GenerateActivityCommandTasks", scheduledEventIDs, controlQueue, commandType)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// GenerateActivityCommandTasks indicates an expected call of GenerateActivityCommandTasks.
+func (mr *MockTaskGeneratorMockRecorder) GenerateActivityCommandTasks(scheduledEventIDs, controlQueue, commandType any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateActivityCommandTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateActivityCommandTasks), scheduledEventIDs, controlQueue, commandType)
+}
+
 // GenerateActivityRetryTasks mocks base method.
 func (m *MockTaskGenerator) GenerateActivityRetryTasks(activityInfo *persistence.ActivityInfo) error {
 	m.ctrl.T.Helper()
@@ -188,20 +202,6 @@ func (m *MockTaskGenerator) GenerateMigrationTasks(targetClusters []string) ([]t
 func (mr *MockTaskGeneratorMockRecorder) GenerateMigrationTasks(targetClusters any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateMigrationTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateMigrationTasks), targetClusters)
-}
-
-// GenerateActivityCommandTasks mocks base method.
-func (m *MockTaskGenerator) GenerateActivityCommandTasks(scheduledEventIDs []int64, controlQueue string, notificationType enums.ActivityCommandType) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GenerateActivityCommandTasks", scheduledEventIDs, controlQueue, notificationType)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// GenerateActivityCommandTasks indicates an expected call of GenerateActivityCommandTasks.
-func (mr *MockTaskGeneratorMockRecorder) GenerateActivityCommandTasks(scheduledEventIDs, controlQueue, notificationType any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateActivityCommandTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateActivityCommandTasks), scheduledEventIDs, controlQueue, notificationType)
 }
 
 // GenerateRecordWorkflowStartedTasks mocks base method.

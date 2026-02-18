@@ -70,6 +70,20 @@ func (m *MockMutableState) EXPECT() *MockMutableStateMockRecorder {
 	return m.recorder
 }
 
+// AddActivityCommandTasks mocks base method.
+func (m *MockMutableState) AddActivityCommandTasks(scheduledEventIDs []int64, controlQueue string, commandType enums0.ActivityCommandType) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddActivityCommandTasks", scheduledEventIDs, controlQueue, commandType)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AddActivityCommandTasks indicates an expected call of AddActivityCommandTasks.
+func (mr *MockMutableStateMockRecorder) AddActivityCommandTasks(scheduledEventIDs, controlQueue, commandType any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddActivityCommandTasks", reflect.TypeOf((*MockMutableState)(nil).AddActivityCommandTasks), scheduledEventIDs, controlQueue, commandType)
+}
+
 // AddActivityTaskCancelRequestedEvent mocks base method.
 func (m *MockMutableState) AddActivityTaskCancelRequestedEvent(arg0, arg1 int64, arg2 string) (*history.HistoryEvent, *persistence.ActivityInfo, error) {
 	m.ctrl.T.Helper()
@@ -406,20 +420,6 @@ func (m *MockMutableState) AddHistorySize(size int64) {
 func (mr *MockMutableStateMockRecorder) AddHistorySize(size any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddHistorySize", reflect.TypeOf((*MockMutableState)(nil).AddHistorySize), size)
-}
-
-// AddActivityCommandTasks mocks base method.
-func (m *MockMutableState) AddActivityCommandTasks(scheduledEventIDs []int64, controlQueue string, notificationType enums0.ActivityCommandType) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddActivityCommandTasks", scheduledEventIDs, controlQueue, notificationType)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// AddActivityCommandTasks indicates an expected call of AddActivityCommandTasks.
-func (mr *MockMutableStateMockRecorder) AddActivityCommandTasks(scheduledEventIDs, controlQueue, notificationType any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddActivityCommandTasks", reflect.TypeOf((*MockMutableState)(nil).AddActivityCommandTasks), scheduledEventIDs, controlQueue, notificationType)
 }
 
 // AddReapplyCandidateEvent mocks base method.
